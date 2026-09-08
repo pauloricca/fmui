@@ -1,0 +1,149 @@
+@font-face{font-family:Atari;src:url('fonts/VT323-Regular.ttf') format('truetype');font-display:swap}
+:root{color-scheme:light;--paper:#fff;--ink:#000;--gap:4px;--dither:repeating-conic-gradient(#000 0% 25%,#fff 0% 50%) 0 0/2px 2px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+/* Override native focus rings for pointer and programmatic focus, including SVG. */
+:focus,:focus-visible{outline:none}
+body{margin:0;background:white;color:black;font:20px/1 Atari,monospace;-webkit-font-smoothing:none}
+button,input{font:inherit;color:inherit;border-radius:0}
+button{position:relative;--bevel:3px;background:white;border:0;padding:2px 6px;cursor:pointer}
+/* Crisp diagonal corners and light top/left edges, like the original Atari buttons.
+   An overlay keeps the bevel from changing control sizes or moving their labels. */
+button::after{content:'';position:absolute;inset:0;border:var(--bevel) solid;border-color:white black black white;pointer-events:none}
+button:active:not(:disabled)::after,button[aria-pressed=true]::after{border-color:black white white black}
+.wave-options button,.window-title>button{--bevel:1px}
+.operator-toggle,.operator-select{--bevel:2px}
+button:active,button[aria-pressed=true]{color:white;background:black}
+button:disabled{cursor:default;color:#777}button:disabled:hover{outline:0}
+.window{width:100%;min-width:900px;height:100dvh;min-height:680px;background:white;border:2px solid black;display:flex;flex-direction:column}
+.window-title{height:30px;flex:none;border-bottom:2px solid black;display:flex;align-items:stretch;background:repeating-linear-gradient(0deg,white 0px,white 2px,black 2px,black 3px)}
+.window-title h1{margin:0 auto;padding:3px 20px;background:white;font:22px/1 Atari,monospace;letter-spacing:1px;align-self:stretch}
+.window-title>button{background:white;color:black;width:28px;padding:0;border:0;display:grid;place-items:center;flex:none;font-size:24px}
+.window-title>.window-box{border-right:2px solid black}.window-title>#zoom{border-left:2px solid black}
+.editor-screen{padding:12px 8px 0;display:grid;grid-template-rows:16px minmax(130px,1fr) auto minmax(142px,1.1fr) 16px;flex:1;min-height:0}
+.commands{display:grid;grid-template-columns:1.4fr repeat(7,minmax(0,1fr));gap:8px;padding:8px;border:4px double black;background:var(--dither);margin:0 8px 12px}
+.commands>button,.voice-name{min-width:0;min-height:0;background:white}
+.commands>button{border:0;background:white}.commands>button:active{background:black}
+.voice-name{display:flex;flex-direction:column;justify-content:center;border:2px solid black;padding:4px;font-size:20px;font-weight:bold}
+.voice-name input{font-size:22px;background:white;border:0;padding:0;width:100%;min-width:0}
+.group-captions,.bottom-captions,.sliders{display:grid;grid-template-columns:repeat(var(--control-count,16),minmax(0,1fr));column-gap:var(--gap)}
+.group-captions,.bottom-captions{font-size:15px;text-align:center;line-height:14px}
+.group-captions span:nth-child(1){grid-column:1/3}.group-captions span:nth-child(2){grid-column:3/9}.group-captions span:nth-child(3){grid-column:9/14}.group-captions span:nth-child(4){grid-column:14/17}
+.group-captions span:nth-child(2),.group-captions span:nth-child(3){border:1px solid black;border-bottom:0}
+.control{min-height:0;min-width:0;text-align:center;display:flex;flex-direction:column}
+.control-title{font-size:20px;line-height:18px;height:20px;flex:none;border:1px solid black;white-space:nowrap;font-weight:bold}
+.slider-body{flex:1;min-height:0;border:1px solid black;border-top:0;position:relative;background:repeating-conic-gradient(#aaa 0% 25%,#fff 0% 50%) 0 0/2px 2px}
+.slider-body:before{content:'';position:absolute;top:12px;bottom:12px;left:50%;transform:translateX(-50%);width:12px;background:var(--dither);border:1px solid black}
+.slider-body:after{content:'';position:absolute;left:50%;top:3px;transform:translateX(-50%);width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:6px solid black;pointer-events:none}
+.slider-body input[type=range]{position:absolute;inset:10px 0;width:100%;height:calc(100% - 20px);margin:0;writing-mode:vertical-lr;direction:rtl;appearance:none;-webkit-appearance:none;background:transparent;cursor:ns-resize;z-index:2;touch-action:none}
+.slider-body input[type=range]::-webkit-slider-thumb{appearance:none;width:44px;height:16px;background:white;border:1px solid black}
+.slider-body input[type=range]::-moz-range-thumb{width:42px;height:14px;background:white;border:1px solid black;border-radius:0}
+.slider-value{position:absolute;left:0;right:0;top:var(--position);transform:translateY(-50%);pointer-events:none;font-size:16px;line-height:14px;z-index:3;white-space:nowrap}
+.down-arrow{position:absolute;bottom:3px;left:50%;transform:translateX(-50%);width:0;height:0;font-size:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid black;pointer-events:none}
+.options{display:flex;flex-direction:column;padding:3px;gap:3px}
+.options button{position:relative;flex:1;min-height:0;line-height:1;padding:0;font-size:19px;border:0;display:grid;place-items:center}
+.options:before,.options:after{display:none}
+.lfo-wave{position:absolute;inset:0;display:block;width:100%;height:100%;overflow:hidden;pointer-events:none}
+.lfo-wave path,.wave-preview polyline{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:miter;shape-rendering:crispEdges}
+.operators{display:grid;grid-template-columns:repeat(var(--operator-count,4),minmax(0,1fr));gap:var(--gap);padding:8px 0 6px}
+.operator-card{min-width:0;display:grid;grid-template-rows:40px minmax(92px,15dvh) 38px;gap:3px}
+.operator-top{display:grid;grid-template-columns:56px minmax(0,1fr) 42px 40px;border:1px solid black;gap:3px;padding:3px;min-height:0}
+.wave-preview{width:100%;height:100%;display:block;border:1px solid black}
+.wave-axis{fill:none;stroke:black;stroke-width:.5}
+.wave-options{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:1fr 1fr;gap:1px}
+.wave-options button{font-size:14px;padding:0;line-height:1;min-width:0}
+.operator-toggle{font-size:13px;padding:0;line-height:10px}
+.operator-toggle[aria-pressed=true]{background:white;color:black}.operator-toggle[aria-pressed=false]{background:black;color:white}
+.operator-select{font-size:27px;padding:0}
+.envelope{width:100%;height:100%;border:1px solid black;display:block;background:white;cursor:pointer;shape-rendering:crispEdges}
+.operator-card.selected .envelope{outline:1px solid black;outline-offset:-3px}
+.operator-meta{font-size:14px;line-height:12px;white-space:pre;overflow:hidden;padding-top:1px}
+.bottom-captions span{border:1px solid black;border-top:0}.bottom-captions span:nth-child(1){grid-column:1/7}.bottom-captions span:nth-child(2){grid-column:7/13}.bottom-captions span:nth-child(3){grid-column:13/14}.bottom-captions span:nth-child(4){grid-column:14/16}.bottom-captions span:nth-child(5){grid-column:16/17}
+.editor-status{margin-top:8px;padding:5px 8px;display:flex;justify-content:space-between;border-top:1px solid black;font-size:16px;flex:none;gap:12px;min-height:27px}
+dialog{background:white;color:black;border:4px double black;box-shadow:5px 5px 0 black;width:480px;padding:22px;font:22px/1.15 Atari,monospace}
+dialog::backdrop{background:repeating-conic-gradient(#0005 0% 25%,transparent 0% 50%) 0 0/2px 2px}dialog h2{font-size:25px;margin:0 0 20px;text-align:center}dialog p{margin:12px 0}dialog a{color:black}dialog .dialog-ok{display:block;margin:24px auto 0;min-width:110px;border:0;box-shadow:none}dialog .dialog-actions{display:flex;gap:12px;justify-content:center}
+@media(min-height:850px){.editor-screen{grid-template-rows:16px minmax(160px,1fr) auto minmax(175px,1.1fr) 16px;padding-top:14px}.operator-card{grid-template-rows:44px minmax(110px,17dvh) 41px}.operator-meta{line-height:13px}}
+.unavailable{display:grid;place-items:center;font-size:17px;color:#666;cursor:help}
+.unavailable:before,.unavailable:after{display:none}
+.global-row{display:grid;grid-template-columns:120px minmax(0,1fr);gap:4px;min-height:0}
+.group-captions{margin-left:124px}
+#algorithm-diagram{display:flex;flex-direction:column;min-height:0;border:1px solid black}
+#algorithm-diagram .control-title{border:0;border-bottom:1px solid black;height:19px;text-align:center}
+#algorithm-diagram svg{width:100%;flex:1;min-height:0;display:block;shape-rendering:crispEdges}
+.algorithm-wires{fill:none;stroke:black;stroke-width:1}
+.algorithm-node{cursor:pointer}
+.algorithm-node:hover rect{stroke-width:3}
+.algorithm-node:focus{outline:none}
+.algorithm-node rect{fill:white;stroke:black;stroke-width:1}
+.algorithm-node text{fill:black;font:18px Atari,monospace;text-anchor:middle}
+.algorithm-node.selected rect{fill:black}.algorithm-node.selected text{fill:white}
+.algorithm-output{font:10px Atari,monospace}
+[hidden]{display:none!important}
+.effects-screen{flex:1;min-height:0;padding:20px 16px 0;display:flex;flex-direction:column;gap:16px}
+.effects-layout{flex:1;min-height:0;display:grid;grid-template-columns:1.15fr 1.2fr .9fr;gap:12px}
+.effects-layout>section{border:4px double black;min-width:0;overflow:auto}
+.effects-layout h2{font-size:23px;text-align:center;margin:0;padding:8px;border-bottom:1px solid black;font-weight:normal}
+#fx-programs{padding:8px;display:grid;gap:6px;height:calc(100% - 40px)}
+#fx-programs button{text-align:left;padding:4px 12px;font-size:22px}
+.effect-detail{display:flex;flex-direction:column}.effect-controls{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;flex:1;min-height:180px}
+.effect-readout{border-top:1px solid black;padding:8px;font-size:18px}.effect-readout p{margin:8px 0}
+.effect-routing svg{display:block;width:100%;height:300px;max-height:45vh;shape-rendering:crispEdges}
+.effect-routing p,.effect-routing label{display:block;margin:16px 12px;font-size:18px;line-height:1.1}
+.effect-routing select{background:white;color:black;border:1px solid black;border-radius:0;font:inherit}
+
+/* Fade the complete control, including custom slider thumbs and readouts. */
+.control[data-disabled=true]{opacity:.45}
+.slider-body input[type=range]:disabled{cursor:default}
+
+/* Focus never adds a visual indicator, even on hovered buttons. */
+:focus,:focus-visible{outline:none!important}
+
+/* Keep selected command faces dark despite toolbar background overrides. */
+.commands button[aria-pressed=true],.commands button:active:not(:disabled){background:black;color:white}
+
+/* Monochrome halftone faces, including inverted selected/pressed states. */
+button{
+  --button-face:repeating-conic-gradient(#000 0% 25%,#fff 0% 100%) 0 0/2px 2px;
+  --button-face-selected:repeating-conic-gradient(#fff 0% 25%,#000 0% 100%) 0 0/2px 2px;
+}
+button, .window-title>button, .commands>button,
+.operator-toggle[aria-pressed=true]{
+  background:var(--button-face);color:black;
+}
+button[aria-pressed=true],button:active:not(:disabled),
+.commands button[aria-pressed=true],.commands button:active:not(:disabled),
+.operator-toggle[aria-pressed=false]{
+  background:var(--button-face-selected);color:white;
+}
+/* The operator enable switch retains its existing light-on / dark-off convention. */
+.operator-toggle[aria-pressed=true]:not(:active){background:var(--button-face);color:black}
+button:disabled{color:#777}
+
+/* The original uses flat, solid choices for waves, numeric lists and operator
+   controls; only switches and command buttons use the halftone bevel. */
+.control:is([data-parameter=LFW],[data-parameter=AMS],[data-parameter=SHIFT],[data-parameter=RATE]) button,
+.wave-options button,.operator-toggle,.operator-select,.window-title>button{
+  --button-face:#fff;
+  --button-face-selected:#000;
+}
+.control:is([data-parameter=LFW],[data-parameter=AMS],[data-parameter=SHIFT],[data-parameter=RATE]) button::after,
+.wave-options button::after,.operator-toggle::after,.operator-select::after,.window-title>button::after{
+  display:none;
+}
+
+.window>.commands{flex:none;height:88px;margin:12px 16px 0}
+
+.commands>button{font-size:20px;font-weight:bold;line-height:1;padding:4px;text-decoration:none;align-self:stretch}
+
+/* Flat choices retain their outline; beveled buttons use only their bevel. */
+.control:is([data-parameter=LFW],[data-parameter=AMS],[data-parameter=SHIFT],[data-parameter=RATE]) button,
+.wave-options button,.operator-toggle,.operator-select{border:1px solid black}
+
+.envelope{touch-action:none}
+.env-guides{opacity:0;pointer-events:none}
+.envelope:hover .env-guides,.envelope.dragging .env-guides{opacity:1;pointer-events:auto}
+.env-hit{fill:none;stroke:transparent;stroke-width:12;pointer-events:stroke;vector-effect:non-scaling-stroke}
+.env-line{fill:none;stroke:black;stroke-width:1;stroke-dasharray:2 3;pointer-events:none;vector-effect:non-scaling-stroke}
+.env-anchor{fill:white;stroke:black;stroke-width:1;vector-effect:non-scaling-stroke}
+.env-label{font:10px Atari,monospace;fill:black;stroke:white;stroke-width:2;paint-order:stroke;pointer-events:none}
+.env-guide:hover .env-line,.env-guide.active .env-line{stroke-dasharray:none;stroke-width:2}
+.env-guide:hover .env-anchor,.env-guide.active .env-anchor{fill:black}
