@@ -13,6 +13,6 @@ Bulk export: F0 43 0n 7E 00 0D [ASCII "LM  8036EF"] [preset time balance] [check
 
 The documented EFEDS request also returns ACED2, ACED and VCED; it must not be treated as an effects-only reply in the MIDI receiver. VMEM effects reside at offsets 91–93. Voice ACED REV is a separate envelope pseudo-reverb parameter.
 
-Effects have a separate local buffer and undo/compare history, retained across view switches. SAVE .SYX exports the displayed effects buffer; the MIDI file menu includes effects with voice JSON snapshots. Reloading resets the prototype. Defaults are local demonstration values, not claimed factory values.
+Effects have a separate local buffer and undo/compare history, retained across view switches. The MIDI file menu includes effects with voice JSON snapshots. Reloading resets the prototype. Defaults are local demonstration values, not claimed factory values.
 
 Validation: automated message framing, ranges, checksum, live input, gesture undo, compare lockout, room-size labeling and navigation tests. Browser layout checked. Not tested against physical YS200 hardware; exact time-index display mapping remains unverified.

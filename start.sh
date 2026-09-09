@@ -2,5 +2,5 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-docker compose up --build -d
+docker compose up -d
 open "http://localhost:5173"

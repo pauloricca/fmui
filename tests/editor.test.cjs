@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
 // Minimal DOM fixture: run the actual UI handlers without a browser dependency.
-function editor(setup="",midi=false){
+function editor(setup="",midi=false,storage=null){
   const nodes=new Map();
   class Element{
     constructor(){this.children=[];this.attributes={};this.style={setProperty(){}};this.classList={add(){},remove(){}};}
@@ -13,13 +13,15 @@ function editor(setup="",midi=false){
     setAttribute(k,v){this.attributes[k]=v}focus(){}close(){this.open=false}showModal(){this.open=true}
   }
   const document={querySelector(s){if(!nodes.has(s))nodes.set(s,new Element());return nodes.get(s)},querySelectorAll(){return []},createElement(){return new Element()},addEventListener(){},activeElement:null};
-  const timers=new Map();let timerId=0;const context=vm.createContext({document,structuredClone,console,TextDecoder,window:{addEventListener(){}},setTimeout(fn,ms){timers.set(++timerId,{fn,ms});return timerId;},clearTimeout(id){timers.delete(id);}});
+  const timers=new Map();let timerId=0;const context=vm.createContext({document,structuredClone,console,TextDecoder,localStorage:storage,setInterval(){},window:{addEventListener(){}},setTimeout(fn,ms){timers.set(++timerId,{fn,ms});return timerId;},clearTimeout(id){timers.delete(id);}});
   vm.runInContext(fs.readFileSync('app/ys200.js','utf8'),context);
   vm.runInContext(fs.readFileSync('app/effects.js','utf8'),context);
+  vm.runInContext(fs.readFileSync('app/waveforms.js','utf8'),context);
   vm.runInContext(fs.readFileSync('app/ys200-profile.js','utf8'),context);
   vm.runInContext(fs.readFileSync('app/dx7.js','utf8'),context);
   vm.runInContext(fs.readFileSync('app/dx7-profile.js','utf8'),context);
   vm.runInContext(fs.readFileSync('app/synths.js','utf8'),context);
+  if(storage)vm.runInContext(fs.readFileSync('app/storage.js','utf8'),context);
   vm.runInContext(setup,context);
   vm.runInContext(fs.readFileSync('app/editor.js','utf8'),context);
   vm.runInContext(fs.readFileSync('app/effects-ui.js','utf8'),context);
@@ -40,10 +42,22 @@ test('input updates voice, graph and labels before change; a drag is one undo st
   slider.onchange();e.run('undoVoice()');
   assert.equal(e.run('voice.operators[0].AR'),27);
 });
+test('live envelope refresh uses effective values without replacing controls or changing the base voice',()=>{
+  const e=editor(),slider=e.get('#op-AR'),card=e.get('#operators').children[0];
+  const before=card.children[1].innerHTML;
+  e.run('const effective=structuredClone(voice);effective.operators[0].AR=8;refreshEnvelopeGraphs(effective)');
+  assert.notEqual(card.children[1].innerHTML,before);
+  assert.match(card.children[2].textContent,/EG:8 /);
+  assert.equal(e.get('#operators').children[0],card);
+  assert.equal(e.get('#op-AR'),slider);
+  assert.equal(e.run('voice.operators[0].AR'),27);
+  e.run('refreshEnvelopeGraphs()');
+  assert.equal(card.children[1].innerHTML,before);
+});
 test('waveform preview follows selection, and compare/undo restore it',()=>{
   const e=editor();e.run("change('wave',7,true)");
-  assert.match(e.get('#operators').children[0].children[0].innerHTML,/Wave 7: Double positive sine squared/);
-  e.get('#compare').onclick();assert.match(e.get('#operators').children[0].children[0].innerHTML,/Wave 0: Sine/);
+  assert.match(e.get('#operators').children[0].children[0].children.find(c=>c.className==='operator-wave').innerHTML,/Wave 7: Double positive sine squared/);
+  e.get('#compare').onclick();assert.match(e.get('#operators').children[0].children[0].children.find(c=>c.className==='operator-wave').innerHTML,/Wave 0: Sine/);
   e.get('#compare').onclick();e.run('undoVoice()');assert.equal(e.run('voice.operators[0].wave'),0);
 });
 test('Yamaha waveform families preserve polarity and silent half cycles',()=>{
@@ -222,7 +236,7 @@ test('shared editor renders six operators, profile feedback and no effects witho
  `);
  assert.equal(e.get('#operators').children.length,6);
  assert.equal(e.get('#operators').attributes['aria-label'],'6 operators');
- assert.equal(e.get('#operators').children[5].children[0].children[0].children.length,1);
+ assert.equal(e.get('#operators').children[5].children[0].children.find(c=>c.className==='wave-options').children.length,1);
  assert.match(e.get('#algorithm-diagram').innerHTML,/on operator 6 to operator 5/);
  assert.match(e.get('#operators').children[5].children[2].textContent,/CUSTOM/);
  assert.equal(e.get('#show-effects').hidden,true);
@@ -443,13 +457,13 @@ test('DX7 file import validates before applying and undo restores the old compar
 
 
 test('live MIDI emits parameter edits, compare and undo and cancels across engines',async()=>{
- const e=editor('',true);e.run("var sent=[];MidiUI.transport.output={state:'connected',send:b=>sent.push(Array.from(b)),clear(){}};MidiUI.transport.delay=async()=>{};MidiUI.config().live=true;change('AR',15)");
+ const e=editor('',true);e.run("var sent=[];MidiUI.transport.output={state:'connected',send:b=>sent.push(Array.from(b)),clear(){}};MidiUI.transport.delay=async()=>{};change('AR',15)");
  await new Promise(r=>setImmediate(r));
  assert.deepEqual(Array.from(e.run('sent[0]')),[240,67,16,18,39,15,247]);
  e.get('#compare').onclick();await new Promise(r=>setImmediate(r));assert.equal(e.run('sent.at(-1)[5]'),27);
  e.get('#compare').onclick();e.run('undoVoice()');await new Promise(r=>setImmediate(r));assert.equal(e.run('sent.at(-1)[5]'),27);
- e.get('#engine-6op').onclick();assert.equal(e.run('MidiUI.config().live'),false);
- e.run('sent=[]');e.run("change('R1',50)");assert.equal(e.run('sent.length'),0);
+ e.get('#engine-6op').onclick();
+ e.run('sent=[]');e.run("change('R1',50)");await new Promise(r=>setImmediate(r));assert.ok(e.run('sent.length')>0);
 });
 test('armed YS200 receive commits all extensions atomically and undo restores effects',()=>{
  const e=editor('',true);e.run("MidiUI.transport.input={state:'connected'};MidiUI.transport.output={state:'connected',send(){},clear(){}};var imported=YS200Profile.createVoice();imported.name='RECEIVED';imported.effects={preset:9,time:40,balance:99};var frames=MidiProtocol.split(YS200Codec.bulk(imported));MidiUI.arm();");
@@ -458,12 +472,12 @@ test('armed YS200 receive commits all extensions atomically and undo restores ef
  e.run('undoVoice()');assert.equal(e.run('voice.name'),'DemoVoice');assert.equal(e.run('EffectsUI.getState().balance'),50);
 });
 test('incoming MIDI is filtered by engine and channel and never echoed',()=>{
- const e=editor('',true);e.run("var sent=[];MidiUI.transport.output={state:'connected',send:b=>sent.push(Array.from(b)),clear(){}};MidiUI.config().live=true;MidiUI.receive(MidiProtocol.parameter(18,39,12,2));");assert.equal(e.run('voice.operators[0].AR'),27);
+ const e=editor('',true);e.run("var sent=[];MidiUI.transport.output={state:'connected',send:b=>sent.push(Array.from(b)),clear(){}};MidiUI.receive(MidiProtocol.parameter(18,39,12,2));");assert.equal(e.run('voice.operators[0].AR'),27);
  e.run('MidiUI.receive(MidiProtocol.parameter(0,0,12,1))');assert.equal(e.run('voice.operators[0].AR'),27);
  e.run('MidiUI.receive(MidiProtocol.parameter(18,39,12,1))');assert.equal(e.run('voice.operators[0].AR'),12);assert.equal(e.run('sent.length'),0);
 });
 test('live effects emit EFEDS addresses and incoming voice parameters preserve current effects',async()=>{
- const e=editor('',true);e.run("var sent=[];MidiUI.transport.output={state:'connected',send:b=>sent.push(Array.from(b)),clear(){}};MidiUI.transport.delay=async()=>{};MidiUI.config().live=true;");e.get('#show-effects').onclick();const input=e.get('#fx-time');input.value='35';input.oninput();await new Promise(r=>setImmediate(r));assert.deepEqual(Array.from(e.run('sent.at(-1)')),[240,67,16,36,5,35,247]);
+ const e=editor('',true);e.run("var sent=[];MidiUI.transport.output={state:'connected',send:b=>sent.push(Array.from(b)),clear(){}};MidiUI.transport.delay=async()=>{};");e.get('#show-effects').onclick();const input=e.get('#fx-time');input.value='35';input.oninput();await new Promise(r=>setImmediate(r));assert.deepEqual(Array.from(e.run('sent.at(-1)')),[240,67,16,36,5,35,247]);
  e.run('MidiUI.receive(MidiProtocol.parameter(18,39,12))');assert.equal(e.run('EffectsUI.getState().time'),35);
 });
 test('receive timeout and corrupt dumps leave the existing voice unchanged',()=>{
@@ -474,9 +488,9 @@ test('receive timeout and corrupt dumps leave the existing voice unchanged',()=>
 test('native file workflow imports standalone effects and matching JSON, rejects another engine',async()=>{
  const e=editor('',true);e.run("MidiUI.files();var bytes=Effects.bulk({preset:10,time:40,balance:99})");
  await e.get('#load-syx').onchange({target:{files:[{name:'effects.syx',arrayBuffer:async()=>e.run('bytes.buffer')}]}});assert.equal(e.run('EffectsUI.getState().preset'),10);
- e.run("var snapshot=Synths.snapshot(synth,voice);snapshot.voice.name='SNAPSHOT';snapshot.voice.operators[0].on=0;");
- const json=Buffer.from(e.run('JSON.stringify(snapshot)'));await e.get('#load-syx').onchange({target:{files:[{name:'voice.json',arrayBuffer:async()=>json}]}});assert.equal(e.run('voice.name'),'SNAPSHOT');assert.equal(e.run('voice.operators[0].on'),0);
- const wrong=Buffer.from(e.run("snapshot.synthId='dx7';JSON.stringify(snapshot)"));await e.get('#load-syx').onchange({target:{files:[{name:'wrong.json',arrayBuffer:async()=>wrong}]}});assert.match(e.get('#file-result').textContent,/selected synth/);assert.equal(e.run('voice.name'),'SNAPSHOT');
+ e.run("var exportedSnapshot=Synths.snapshot(synth,voice);exportedSnapshot.voice.name='SNAPSHOT';exportedSnapshot.voice.operators[0].on=0;");
+ const json=Buffer.from(e.run('JSON.stringify(exportedSnapshot)'));await e.get('#load-syx').onchange({target:{files:[{name:'voice.json',arrayBuffer:async()=>json}]}});assert.equal(e.run('voice.name'),'SNAPSHOT');assert.equal(e.run('voice.operators[0].on'),0);
+ const wrong=Buffer.from(e.run("exportedSnapshot.synthId='dx7';JSON.stringify(exportedSnapshot)"));await e.get('#load-syx').onchange({target:{files:[{name:'wrong.json',arrayBuffer:async()=>wrong}]}});assert.match(e.get('#file-result').textContent,/selected synth/);assert.equal(e.run('voice.name'),'SNAPSHOT');
 });
 
 test('YS200 Config assignments use native destination amounts and support undo',async()=>{
@@ -490,4 +504,64 @@ test('YS200 Config assignments use native destination amounts and support undo',
  assert.equal(e.run('YS200Codec.encode(voice).aced2[1]'),1);
  assert.equal(e.run('YS200Codec.encode(voice).aced2[0]'),0);
  e.run('undoVoice()');assert.equal(e.run('YS200Codec.encode(voice).aced2[1]'),0);
+});
+
+function sessionEditor(storage) {
+  const e = editor('', true, storage);
+  e.run("const Modulations={getState:()=>({macros:[],xy:{x:50,y:50,latch:false},lfos:[]})}; $('#modulations-screen').hidden=true;");
+  e.run(fs.readFileSync('app/session.js','utf8'));
+  return e;
+}
+test('session reload restores both engines, histories, effects, MIDI settings and pitch view',()=>{
+  const data = new Map(), storage = {getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,v)};
+  const a = sessionEditor(storage);
+  a.run("change('AR',8,true); EffectsUI.setState({preset:7,time:33,balance:66}); MidiUI.config().tx=5; MidiUI.config().input='saved-port'; switchEngine('dx7'); change('R1',42,true); selected=3; setPitch(true); MidiUI.config().rx=9;  Session.save()");
+  const b = sessionEditor(storage);
+  assert.equal(b.run('synth.id'),'dx7');
+  assert.equal(b.run('voice.operators[0].R1'),42);
+  assert.equal(b.run('selected'),3);
+  assert.equal(b.run('pitchEditing'),true);
+  assert.equal(b.run('MidiUI.config().rx'),9);
+  assert.equal(b.run('MidiUI.config().rx'),9);
+  assert.equal(b.run('EffectsUI.getState().balance'),66);
+  b.run("undoVoice()");assert.notEqual(b.run('voice.operators[0].R1'),42);
+  b.run("redoVoice()");assert.equal(b.run('voice.operators[0].R1'),42);
+  b.run("switchEngine('ys200')");
+  assert.equal(b.run('voice.operators[0].AR'),8);
+  assert.equal(b.run('MidiUI.config().tx'),5);
+  assert.equal(b.run('MidiUI.config().input'),'saved-port');
+  b.run('undoVoice()');assert.equal(b.run('voice.operators[0].AR'),27);
+});
+test('invalid session data and unavailable storage do not prevent editing',()=>{
+  for(const value of ['{broken', JSON.stringify({version:1,engine:'dx7',buffers:{dx7:{voice:null}},effects:{},midi:{settings:{dx7:{tx:999}}}})]) {
+    const e=sessionEditor({getItem:key=>key==='yseditor-session-v1'?value:null,setItem(){throw Error('quota');}});
+    e.run('Session.save()');
+    assert.match(e.get('#status').textContent,/COULD NOT BE SAVED/);
+    assert.equal(e.run('voice.operators.length'),e.run('synth.operatorCount'));
+  }
+});
+
+test('MIDI mappings route modulation controls with fractional speed ranges',()=>{
+  const e=editor("let received;const Modulations={apply:voice=>voice,setValue:(key,value)=>received={key,value},refreshMappings(){},getState:()=>({macros:[]})};");
+  e.run("mappedChange({engine:synth.id,key:'mod:lfo:0:speed',range:[.01,20]},127)");
+  assert.equal(e.run('received.value'),20);
+  e.run("openMapping({key:'mod:lfo:0:speed',isOp:false,index:0})");
+  e.get('#mapping-channel').value='1';e.get('#mapping-cc').value='74';
+  e.get('#mapping-min').value='.05';e.get('#mapping-max').value='3.75';
+  e.get('#mapping-save').onclick();
+  assert.equal(e.run('mappings[0].range[0]'),.05);
+  assert.equal(e.run('mappings[0].range[1]'),3.75);
+});
+
+test('mapping toggles preserve Randomise availability for the active view',()=>{
+  const e=editor();
+  e.get('#effects-screen').hidden=true;
+  e.get('#modulations-screen').hidden=false;
+  e.run('setMappingMode(true)');
+  assert.equal(e.get('#seed').disabled,true);
+  e.run('setMappingMode(false)');
+  assert.equal(e.get('#seed').disabled,true);
+  e.get('#modulations-screen').hidden=true;
+  e.run('render()');
+  assert.equal(e.get('#seed').disabled,false);
 });

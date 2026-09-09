@@ -4,9 +4,10 @@ const MidiUI = (() => {
   YS200Profile.midi.voiceCodec = YS200Codec;
   DX7Profile.midi.voiceCodec = DX7Midi;
   const settings = {
-    ys200: { input: "", output: "", tx: 1, rx: 1, live: false },
-    dx7: { input: "", output: "", tx: 1, rx: 1, live: false },
+    ys200: { input: "", output: "", tx: 1, rx: 1 },
+    dx7: { input: "", output: "", tx: 1, rx: 1 },
   };
+  const audition = {note: 60, velocity: 100, program: 1, mod: 0, breath: 0, foot: 0, volume: 100, pressure: 0, bend: 8192, sustain: false};
   const banks = new Map(),
     functionsState = { dx7: {}, ys200: {} };
   let last = structuredClone(shown()),
@@ -27,11 +28,6 @@ const MidiUI = (() => {
   const transport = new MidiTransport({
     onMessage: receive,
     onStatus: (text) => {
-      if (text.startsWith("MIDI send failed:")) {
-        config().live = false;
-        const live = $("#midi-live");
-        if (live) live.checked = false;
-      }
       notify(text);
     },
     onPorts: () => {
@@ -39,7 +35,6 @@ const MidiUI = (() => {
         transport.input?.state === "disconnected" ||
         transport.output?.state === "disconnected"
       ) {
-        config().live = false;
         receiveArmed = false;
         pending = [];
         clearTimeout(receiveTimer);
@@ -76,14 +71,13 @@ const MidiUI = (() => {
     if (engine !== synth.id) {
       reset();
       engine = synth.id;
-      config().live = false;
       if (transport.access)
         safe(() => transport.select(config().input, config().output))();
       last = current();
       return;
     }
     const v = current();
-    if (config().live && transport.output) {
+    if (transport.output && transport.output.state !== "disconnected") {
       try {
         const messages = [];
         const a =
@@ -134,7 +128,7 @@ const MidiUI = (() => {
     } finally {
       suppress = false;
     }
-    if (config().live && !fromMidi) sendVoice();
+    if (transport.output && transport.output.state !== "disconnected" && !fromMidi) sendVoice();
     notify(synth.shortName + " VOICE RECEIVED / IMPORTED · ⌘Z TO RESTORE");
   }
   function arm(bank = false) {
@@ -176,7 +170,6 @@ const MidiUI = (() => {
       const ch = (message[2] & 15) + 1;
       if (ch !== config().rx || message[1] !== 67) return;
       if (message[2] >= 16 && message[2] <= 31) {
-        if (!config().live) return;
         const p = P.readParameter(message);
         if (synth.id === "dx7" && p.group === 8) {
           const spec = dxFunctions.find((s) => s[1] === p.address);
@@ -293,20 +286,25 @@ const MidiUI = (() => {
     (_, i) => `<option value="${i + 1}">${i + 1}</option>`,
   ).join("");
   function dialog() {
-    return `<p>MIDI runs in your browser. Choose the interface connected to your ${synth.shortName}.</p>${button("midi-connect", "ENABLE MIDI / SYSEX")}<div class="midi-fields"><label>MIDI INPUT <select id="midi-input"></select></label><label>MIDI OUTPUT <select id="midi-output"></select></label><label>SEND CHANNEL <select id="midi-tx">${channelOptions}</select></label><label>RECEIVE CHANNEL <select id="midi-rx">${channelOptions}</select></label></div><p><label><input type="checkbox" id="midi-live"> LIVE EDIT (send displayed voice when enabled)</label></p><p>${button("midi-send", "SEND VOICE")} ${button("midi-receive", "RECEIVE VOICE")} ${button("midi-bank", "RECEIVE BANK")} ${button("midi-cancel", "CANCEL TRANSFER")}</p><p>${synth.id === "dx7" ? "Original DX7: receive channel defaults to 1. Enable SYS INFO on the synth. Receive listens for a front-panel dump." : "YS200: use the matching device channels and enable exclusive reception. Receive requests effects and all voice blocks."}</p><fieldset><legend>HARDWARE AUDITION</legend><label>NOTE <input id="midi-note" type="number" min="1" max="127" value="60"></label><label>VELOCITY <input id="midi-velocity" type="number" min="1" max="127" value="100"></label>${button("midi-test", "PLAY 1 SECOND")} ${button("midi-panic", "PANIC")}<label>PROGRAM (1–128) <input id="midi-program" type="number" min="1" max="128" value="1"></label>${button("midi-program-send", "SELECT PROGRAM")}<label>MOD WHEEL <input id="midi-mod" type="range" min="0" max="127" value="0"></label><label>BREATH <input id="midi-breath" type="range" min="0" max="127" value="0"></label><label>FOOT <input id="midi-foot" type="range" min="0" max="127" value="0"></label><label>VOLUME <input id="midi-volume" type="range" min="0" max="127" value="100"></label><label>PRESSURE <input id="midi-pressure" type="range" min="0" max="127" value="0"></label><label>PITCH BEND <input id="midi-bend" type="range" min="0" max="16383" value="8192"></label><label><input id="midi-sustain" type="checkbox"> SUSTAIN</label></fieldset><p id="midi-status" role="status"></p>`;
+    return `<p>MIDI runs in your browser. Choose the interface connected to your ${synth.shortName}.</p>${button("midi-connect", "ENABLE MIDI / SYSEX")}<div class="midi-fields"><label>MIDI INPUT <select id="midi-input"></select></label><label>MIDI OUTPUT <select id="midi-output"></select></label><label>SEND CHANNEL <select id="midi-tx">${channelOptions}</select></label><label>RECEIVE CHANNEL <select id="midi-rx">${channelOptions}</select></label></div><p>Edits are sent automatically to the connected MIDI output.</p><p>${button("midi-send", "SEND VOICE")} ${button("midi-receive", "RECEIVE VOICE")} ${button("midi-bank", "RECEIVE BANK")} ${button("midi-cancel", "CANCEL TRANSFER")}</p><p>${synth.id === "dx7" ? "Original DX7: receive channel defaults to 1. Enable SYS INFO on the synth. Receive listens for a front-panel dump." : "YS200: use the matching device channels and enable exclusive reception. Receive requests effects and all voice blocks."}</p><fieldset><legend>HARDWARE AUDITION</legend><label>NOTE <input id="midi-note" type="number" min="1" max="127" value="60"></label><label>VELOCITY <input id="midi-velocity" type="number" min="1" max="127" value="100"></label>${button("midi-test", "PLAY 1 SECOND")} ${button("midi-panic", "PANIC")}<label>PROGRAM (1–128) <input id="midi-program" type="number" min="1" max="128" value="1"></label>${button("midi-program-send", "SELECT PROGRAM")}<label>MOD WHEEL <input id="midi-mod" type="range" min="0" max="127" value="0"></label><label>BREATH <input id="midi-breath" type="range" min="0" max="127" value="0"></label><label>FOOT <input id="midi-foot" type="range" min="0" max="127" value="0"></label><label>VOLUME <input id="midi-volume" type="range" min="0" max="127" value="100"></label><label>PRESSURE <input id="midi-pressure" type="range" min="0" max="127" value="0"></label><label>PITCH BEND <input id="midi-bend" type="range" min="0" max="16383" value="8192"></label><label><input id="midi-sustain" type="checkbox"> SUSTAIN</label></fieldset><p id="midi-status" role="status"></p>`;
   }
   function setup() {
     refreshPorts();
+    for (const [key, value] of Object.entries(audition)) {
+      const el = $('#midi-' + key);
+      if (key === 'sustain') el.checked = value;
+      else el.value = value;
+      el.addEventListener?.('input', () => {audition[key] = key === 'sustain' ? el.checked : Number(el.value);});
+    }
     $("#midi-connect").onclick = safe(async () => {
       await transport.connect();
+      await transport.select(config().input, config().output);
       notify("MIDI enabled. Select your input and output.");
     });
     for (const k of ["input", "output"])
       $("#midi-" + k).onchange = safe(async (e) => {
         reset();
         config()[k] = e.target.value;
-        config().live = false;
-        $("#midi-live").checked = false;
         await transport.select(config().input, config().output);
       });
     for (const k of ["tx", "rx"]) {
@@ -315,26 +313,8 @@ const MidiUI = (() => {
       el.onchange = () => {
         reset();
         config()[k] = Number(el.value);
-        config().live = false;
-        $("#midi-live").checked = false;
       };
     }
-    $("#midi-live").checked = config().live;
-    $("#midi-live").onchange = safe(() => {
-      if ($("#midi-live").checked) {
-        try {
-          sendVoice();
-          config().live = true;
-        } catch (e) {
-          $("#midi-live").checked = false;
-          throw e;
-        }
-      } else {
-        config().live = false;
-        transport.cancel();
-      }
-      last = current();
-    });
     $("#midi-send").onclick = safe(sendVoice);
     $("#midi-receive").onclick = safe(() => arm());
     $("#midi-bank").onclick = safe(() => arm(true));
@@ -378,8 +358,6 @@ const MidiUI = (() => {
       if (!Number.isInteger(p) || p < 1 || p > 128)
         throw Error("Program must be 1–128");
       reset();
-      config().live = false;
-      $("#midi-live").checked = false;
       transport.message(192, [p - 1], config().tx);
     });
     for (const [id, cc] of [
@@ -760,6 +738,30 @@ const MidiUI = (() => {
   });
   if (typeof RetroSelect !== "undefined") RetroSelect.enhance(document);
   return {
+    snapshot: () => structuredClone({settings, banks: Array.from(banks), functionsState, audition}),
+    restore(saved) {
+      if (!saved || typeof SessionStorage === 'undefined') return;
+      Object.assign(settings, SessionStorage.merge(settings, saved.settings));
+      Object.assign(audition, SessionStorage.merge(audition, saved.audition));
+      for (const cfg of Object.values(settings)) {
+        for (const key of ['tx', 'rx']) if (!Number.isInteger(cfg[key]) || cfg[key] < 1 || cfg[key] > 16) cfg[key] = 1;
+      }
+      for (const id of ['ys200', 'dx7']) {
+        const values = saved.functionsState?.[id];
+        if (values && typeof values === 'object') for (const [key, value] of Object.entries(values))
+          if (/^\d+$/.test(key) && Number.isInteger(value) && value >= 0 && value <= 127) functionsState[id][key] = value;
+      }
+      for (const [id, voices] of Array.isArray(saved.banks) ? saved.banks.filter(Array.isArray) : []) {
+        try {
+          const profile = Synths.get(id);
+          if (!Array.isArray(voices) || voices.length > 32) continue;
+          voices.forEach(v => profile.midi.voiceCodec.bulk(v, 1));
+          banks.set(id, structuredClone(voices));
+        } catch {}
+      }
+      engine = synth.id;
+      last = current();
+    },
     changed,
     get transport() {
       return transport;

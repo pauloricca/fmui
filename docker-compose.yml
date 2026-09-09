@@ -3,5 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: development
     ports:
-      - "5173:80"
+      - "5173:5173"
+    volumes:
+      - ./app:/workspace/app:ro
+      - ./bs-config.cjs:/workspace/bs-config.cjs:ro

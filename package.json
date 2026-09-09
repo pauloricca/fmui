@@ -1,0 +1,14 @@
+{
+  "name": "ys200-editor",
+  "private": true,
+  "scripts": {
+    "dev": "browser-sync start --config bs-config.cjs",
+    "test": "node --test tests/*.test.cjs"
+  },
+  "devDependencies": {
+    "browser-sync": "3.0.4"
+  },
+  "overrides": {
+    "immutable": "^4.3.9"
+  }
+}

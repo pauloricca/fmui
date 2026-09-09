@@ -12,6 +12,7 @@ function model() {
   for (const f of [
     "ys200",
     "effects",
+    "waveforms",
     "ys200-profile",
     "dx7",
     "midi-protocol",
