@@ -1,10 +1,6 @@
 'use strict';
-// Planned devices are metadata, never selectable editors or compatible codecs.
 const Synths = (() => {
-  const plannedDX7={id:'dx7',label:'Yamaha DX7 (original)',status:'planned',operatorCount:6,
-    algorithmCount:32,waveformCount:1,envelopeModel:'four-rates-four-levels',
-    pitchEnvelope:true,effects:null,midi:{voiceCodec:null,transport:null}};
-  const profiles=new Map([['ys200',YS200Profile],['dx7',plannedDX7]]);
+  const profiles=new Map([['ys200',YS200Profile],['dx7',DX7Profile]]);
   function get(id){
     const profile=profiles.get(id);
     if(!profile)throw new RangeError('Unknown synthesizer: '+id);

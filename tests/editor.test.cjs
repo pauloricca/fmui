@@ -3,25 +3,28 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
 // Minimal DOM fixture: run the actual UI handlers without a browser dependency.
-function editor(setup=""){
+function editor(setup="",midi=false){
   const nodes=new Map();
   class Element{
-    constructor(){this.children=[];this.attributes={};this.style={setProperty(){}};this.classList={add(){}};}
+    constructor(){this.children=[];this.attributes={};this.style={setProperty(){}};this.classList={add(){},remove(){}};}
     set id(v){this._id=v;nodes.set('#'+v,this)}get id(){return this._id}
     append(...children){this.children.push(...children)}
     replaceChildren(...children){this.children=children}
-    setAttribute(k,v){this.attributes[k]=v}focus(){}
+    setAttribute(k,v){this.attributes[k]=v}focus(){}close(){this.open=false}showModal(){this.open=true}
   }
   const document={querySelector(s){if(!nodes.has(s))nodes.set(s,new Element());return nodes.get(s)},querySelectorAll(){return []},createElement(){return new Element()},addEventListener(){},activeElement:null};
-  const context=vm.createContext({document,structuredClone,console});
+  const timers=new Map();let timerId=0;const context=vm.createContext({document,structuredClone,console,TextDecoder,window:{addEventListener(){}},setTimeout(fn,ms){timers.set(++timerId,{fn,ms});return timerId;},clearTimeout(id){timers.delete(id);}});
   vm.runInContext(fs.readFileSync('app/ys200.js','utf8'),context);
   vm.runInContext(fs.readFileSync('app/effects.js','utf8'),context);
   vm.runInContext(fs.readFileSync('app/ys200-profile.js','utf8'),context);
+  vm.runInContext(fs.readFileSync('app/dx7.js','utf8'),context);
+  vm.runInContext(fs.readFileSync('app/dx7-profile.js','utf8'),context);
   vm.runInContext(fs.readFileSync('app/synths.js','utf8'),context);
   vm.runInContext(setup,context);
   vm.runInContext(fs.readFileSync('app/editor.js','utf8'),context);
   vm.runInContext(fs.readFileSync('app/effects-ui.js','utf8'),context);
-  return {get:s=>document.querySelector(s),run:s=>vm.runInContext(s,context)};
+  if(midi)for(const name of ['midi-protocol','midi-transport','midi-ui'])vm.runInContext(fs.readFileSync('app/'+name+'.js','utf8'),context);
+  return {get:s=>document.querySelector(s),run:s=>vm.runInContext(s,context),timers};
 }
 test('input updates voice, graph and labels before change; a drag is one undo step',()=>{
   const e=editor(),slider=e.get('#op-AR');
@@ -34,14 +37,14 @@ test('input updates voice, graph and labels before change; a drag is one undo st
   assert.equal(e.run('voice.operators[0].AR'),8);
   assert.equal(e.get('#op-AR'),slider,'the active slider must not be replaced');
   assert.equal(e.run('history.length'),1);
-  slider.onchange();e.get('#undo').onclick();
+  slider.onchange();e.run('undoVoice()');
   assert.equal(e.run('voice.operators[0].AR'),27);
 });
 test('waveform preview follows selection, and compare/undo restore it',()=>{
   const e=editor();e.run("change('wave',7,true)");
   assert.match(e.get('#operators').children[0].children[0].innerHTML,/Wave 7: Double positive sine squared/);
   e.get('#compare').onclick();assert.match(e.get('#operators').children[0].children[0].innerHTML,/Wave 0: Sine/);
-  e.get('#compare').onclick();e.get('#undo').onclick();assert.equal(e.run('voice.operators[0].wave'),0);
+  e.get('#compare').onclick();e.run('undoVoice()');assert.equal(e.run('voice.operators[0].wave'),0);
 });
 test('Yamaha waveform families preserve polarity and silent half cycles',()=>{
   const e=editor();
@@ -193,7 +196,7 @@ test('effects live drag, undo, compare and navigation retain independent buffers
  assert.match(e.get('#fx-summary').textContent,/TIME 40/);assert.equal(e.get('#fx-time'),slider);
  e.get('#compare').onclick();assert.equal(e.get('#fx-time').value,20);assert.equal(e.get('#fx-time').disabled,true);
  e.get('#compare').onclick();e.get('#show-voice').onclick();e.get('#show-effects').onclick();assert.equal(e.get('#fx-time').value,40);
- e.get('#undo').onclick();assert.equal(e.get('#fx-time').value,20);assert.equal(e.run('history.length'),0);
+ e.run('EffectsUI.undo()');assert.equal(e.get('#fx-time').value,20);assert.equal(e.run('history.length'),0);
  e.get('#fx-programs').children[8].onclick();assert.match(e.get('#fx-summary').textContent,/SIZE 20/);
 });
 
@@ -203,7 +206,7 @@ test('snapshots identify the synth and version and do not alias the edit buffer'
  assert.equal(e.run('Synths.snapshot(synth,voice).version'),1);
  e.run('const saved=Synths.snapshot(synth,voice);saved.voice.operators[0].AR=1');
  assert.equal(e.run('voice.operators[0].AR'),27);
- assert.throws(()=>e.run('Synths.get("dx7")'),/not implemented/);
+ assert.equal(e.run('Synths.get("dx7").operatorCount'),6);
  assert.throws(()=>e.run('Synths.get("unknown")'),/Unknown/);
  assert.throws(()=>e.run('Synths.snapshot(synth,{operators:[]})'),/operator count/);
 });
@@ -225,7 +228,7 @@ test('shared editor renders six operators, profile feedback and no effects witho
  assert.equal(e.get('#show-effects').hidden,true);
  e.run("selected=5;change('OUT',45,true)");
  assert.equal(e.run('voice.operators[5].OUT'),45);
- e.get('#undo').onclick();assert.equal(e.run('voice.operators[5].OUT'),92);
+ e.run('undoVoice()');assert.equal(e.run('voice.operators[5].OUT'),92);
 });
 test('parameter scope belongs to the profile even when a caller supplies the wrong scope',()=>{
  const e=editor();
@@ -244,7 +247,7 @@ test('FIX range and operator shift availability follow mode, selection, undo and
   e.run("change('FIX',1,true);change('FIXRG',4,true);change('FIX',0,true)");
   assert.equal(e.run('voice.operators[0].FIXRG'),4);
   assert.equal(e.get('#op-FIXRG').disabled,true);
-  e.get('#undo').onclick();
+  e.run('undoVoice()');
   assert.equal(e.get('#op-FIXRG').disabled,false);
   assert.equal(control('FIXRG').attributes['data-disabled'],'false');
   e.get('#compare').onclick();
@@ -276,7 +279,7 @@ test('decay availability updates during a drag without replacing controls or los
   set(d1l,8);
   assert.equal(d2r.disabled,false);
   assert.equal(e.run('voice.operators[0].D2R'),0);
-  e.get('#undo').onclick();
+  e.run('undoVoice()');
   assert.equal(e.get('#op-D2R').disabled,true);
 });
 
@@ -319,7 +322,6 @@ test('persistent header tabs reflect the active view and restore view-specific a
   assert.equal(e.get('.editor-screen').hidden,true);
   assert.equal(e.get('#effects-screen').hidden,false);
   assert.equal(e.get('#seed').disabled,true);
-  assert.equal(e.get('#undo').disabled,true);
   e.get('#compare').onclick();
   assert.equal(e.get('#compare').attributes['aria-pressed'],'true');
   e.get('#show-voice').onclick();
@@ -327,7 +329,7 @@ test('persistent header tabs reflect the active view and restore view-specific a
   assert.equal(e.get('#show-effects').attributes['aria-pressed'],'false');
   assert.equal(e.get('#compare').attributes['aria-pressed'],'false');
   assert.equal(e.get('#seed').disabled,false);
-  e.get('#undo').onclick();
+  e.run('undoVoice()');
   assert.equal(e.run('voice.operators[0].AR'),27);
   e.get('#show-effects').onclick();
   assert.equal(e.get('#compare').attributes['aria-pressed'],'true');
@@ -345,7 +347,7 @@ test('envelope guide drags update the selected operator live with one undo trans
   assert.equal(e.run('voice.operators[0].AR'),17);
   assert.equal(e.run('history.length'),1);
   host.onpointerup({pointerId:1});
-  e.get('#undo').onclick();assert.equal(e.run('voice.operators[0].AR'),27);
+  e.run('undoVoice()');assert.equal(e.run('voice.operators[0].AR'),27);
   begin('D1L','y',2);
   host.onpointermove({pointerId:1,clientX:100,clientY:132});
   assert.equal(e.run('selected'),2);
@@ -362,7 +364,7 @@ test('envelope guides identify reachable stages and omit unavailable parameters'
   assert.match(e.run('envelope(voice.operators[0],0)'),/data-key="D1R"/);
   assert.doesNotMatch(e.run('envelope({...voice.operators[0],D1L:15},0)'),/data-key="D1R"/);
   assert.doesNotMatch(e.run('envelope({...voice.operators[0],D1R:0,D1L:8},0)'),/data-key="D2R"/);
-  assert.match(e.run('envelope({...voice.operators[0],D1R:0,D1L:8},0)'),/data-key="D1L"/);
+  assert.doesNotMatch(e.run('envelope({...voice.operators[0],D1R:0,D1L:8},0)'),/data-key="D1L"/);
 });
 
 
@@ -380,4 +382,112 @@ test('envelope drags keep decay rates above zero while sliders still allow zero'
     const slider=e.get('#op-'+key);slider.value='0';slider.oninput();slider.onchange();
     assert.equal(e.run(`voice.operators[0].${key}`),0);
   }
+});
+
+
+test('every envelope anchor lies exactly on its corresponding stage corner',()=>{
+  const e=editor();
+  for(const d1r of [0,9,31])for(const d1l of [0,8,15])for(const ar of [1,31]){
+    const eg=e.run(`synth.envelopePoints({...voice.operators[0],AR:${ar},D1R:${d1r},D1L:${d1l}},0)`);
+    for(const guide of eg.guides)assert.ok(eg.points.some(([x,y])=>x===guide.x&&y===guide.y),guide.key);
+    const attack=eg.guides.find(g=>g.key==='AR');
+    assert.equal(attack.x,eg.points[1][0]);assert.equal(attack.y,eg.points[1][1]);
+    const release=eg.guides.find(g=>g.key==='RR');
+    if(release){assert.equal(release.x,eg.points.at(-1)[0]);assert.equal(release.y,eg.points.at(-1)[1]);}
+  }
+});
+
+test('engine switching preserves voice, selection, compare, undo and YS200 effects',()=>{
+ const e=editor();e.run("change('AR',14)");e.get('#show-effects').onclick();e.get('#fx-programs').children[4].onclick();
+ e.get('#engine-6op').onclick();assert.equal(e.run('synth.id'),'dx7');assert.equal(e.get('#operators').children.length,6);assert.equal(e.get('#show-effects').hidden,true);
+ e.run("selected=5;change('R1',23);change('DET',-7)");e.get('#compare').onclick();
+ e.get('#engine-4op').onclick();assert.equal(e.run('voice.operators[0].AR'),14);e.get('#show-effects').onclick();assert.match(e.get('#fx-summary').textContent,/^4 /);
+ e.get('#engine-6op').onclick();assert.equal(e.run('comparing'),true);assert.equal(e.run('selected'),5);e.get('#compare').onclick();assert.equal(e.run('voice.operators[5].R1'),23);e.run('undoVoice()');assert.equal(e.run('voice.operators[5].DET'),0);
+});
+test('DX7 pitch uses global parameters and shares undo and compare',()=>{
+ const e=editor();e.get('#engine-6op').onclick();e.get('#show-pitch').onclick();assert.equal(e.get('#operator-controls').children.length,8);
+ const slider=e.get('#global-PL1');slider.value='80';slider.oninput();slider.onchange();assert.equal(e.run('voice.global.PL1'),80);assert.equal(e.run('voice.operators[0].PL1'),undefined);
+ e.get('#compare').onclick();assert.equal(e.get('#global-PL1').value,50);e.get('#compare').onclick();e.run('undoVoice()');assert.equal(e.run('voice.global.PL1'),50);
+ e.get('#show-voice').onclick();assert.equal(e.run('pitchEditing'),false);assert.equal(e.get('#operator-controls').children.length,18);
+});
+test('DX7 frequency, stage order, release level, bounds and native ranges',()=>{
+ const e=editor();assert.equal(e.run('DX7.frequencyLabel({...DX7.createVoice().operators[0],CRS:0,FINE:50})'),'RATIO 0.75');assert.equal(e.run('DX7.frequencyLabel({...DX7.createVoice().operators[0],FIX:1,CRS:7,FINE:0})'),'1000.00 Hz');
+ for(const rate of [0,50,99]){const p=e.run(`DX7.envelopePoints({R1:${rate},R2:${rate},R3:${rate},R4:${rate},L1:10,L2:90,L3:20,L4:70}).points`);assert.equal(p[0][1],p.at(-1)[1]);assert.ok(p[1][1]>p[0][1]);assert.ok(p[2][1]<p[1][1]);for(let i=0;i<p.length;i++){assert.ok(p[i].every(Number.isFinite));assert.ok(p[i][0]>=3&&p[i][0]<=247.00001);if(i)assert.ok(p[i][0]>=p[i-1][0]);}}
+ assert.equal(e.run('DX7.valid("R1",0)'),true);assert.equal(e.run('DX7.valid("CRS",32)'),false);assert.equal(e.run('DX7.valid("AR",31)'),false);
+});
+test('DX7 all 32 algorithms match Yamaha routing and feedback bus definitions',()=>{
+ const e=editor();
+ // Independent bus representation, OP6 first. Factual topology cross-check
+ // against the Yamaha chart and MSFA fm_core.cc (see DX7_REFERENCE.md).
+ const rows=['c1 11 11 14 01 14','01 11 11 14 c1 14','c1 11 14 01 11 14','c1 11 94 01 11 14','c1 14 01 14 01 14','c1 94 01 14 01 14','c1 11 05 14 01 14','01 11 c5 14 01 14','01 11 05 14 c1 14','01 05 14 c1 11 14','c1 05 14 01 11 14','01 05 05 14 c1 14','c1 05 05 14 01 14','c1 05 11 14 01 14','01 05 11 14 c1 14','c1 11 02 25 05 14','01 11 02 25 c5 14','01 11 11 c5 05 14','c1 14 14 01 11 14','01 05 14 c1 14 14','01 14 14 c1 14 14','c1 14 14 14 01 14','c1 14 14 01 14 04','c1 14 14 14 04 04','c1 14 14 04 04 04','c1 05 14 01 14 04','01 05 14 c1 14 04','04 c1 11 14 01 14','c1 14 01 14 04 04','04 c1 11 14 04 04','c1 14 04 04 04 04','c4 04 04 04 04 04'];
+ rows.forEach((row,n)=>{const buses=[[],[],[]],edges=[],carriers=[];let fbIn,fbOut;row.split(' ').map(x=>parseInt(x,16)).forEach((f,i)=>{const op=5-i,input=(f>>4)&3,output=f&3;if(input)for(const source of buses[input])edges.push([source,op]);if(!output)carriers.push(op);if(f&64)fbIn=op;if(f&128)fbOut=op;if(f&4)buses[output].push(op);else buses[output]=[op];});const a=JSON.parse(e.run(`JSON.stringify(DX7.algorithms[${n}])`));assert.deepEqual(a.edges.sort(),edges.sort(),'algorithm '+(n+1));assert.deepEqual(a.carriers.sort(),carriers.sort());assert.deepEqual(a.feedback,[[fbOut,fbIn]]);assert.equal(new Set(a.positions.map(p=>p.join(','))).size,6);});
+});
+test('DX7 wire format uses OP6 first, signed offsets and temporary mute mask',()=>{
+ const e=editor();e.run('var v=DX7.createVoice();v.operators[5].R1=17;v.operators[5].DET=-7;v.global.ALG=32;v.global.TRPS=-24;var b=DX7Codec.encode(v)');assert.equal(e.run('b.length'),155);assert.equal(e.run('b[0]'),17);assert.equal(e.run('b[20]'),0);assert.equal(e.run('b[134]'),31);assert.equal(e.run('b[144]'),0);
+ assert.equal(e.run('JSON.stringify(DX7Codec.decode(b))===JSON.stringify(v)'),true);
+ assert.equal(e.run('Array.from(DX7Codec.parameter(v,"ALG",0,16)).join(",")'),'240,67,31,1,6,31,247');e.run('v.operators[0].on=0');assert.equal(e.run('Array.from(DX7Codec.parameter(v,"on")).join(",")'),'240,67,16,1,27,31,247');assert.equal(e.run('DX7Codec.decode(DX7Codec.encode(v)).operators[0].on'),1);
+});
+test('DX7 single and packed bank dumps round-trip and reject corrupt inputs',()=>{
+ const e=editor();e.run(`var voices=Array.from({length:32},(_,n)=>{const v=DX7.createVoice();v.name='TEST '+n;for(const op of v.operators)for(const k of DX7.operatorKeys){const [lo,hi]=DX7.ranges[k];op[k]=lo+(n*7)%(hi-lo+1);}for(const k of DX7.globalKeys){const [lo,hi]=DX7.ranges[k];v.global[k]=lo+n%(hi-lo+1);}return v;});var bank=DX7Codec.bulk(voices,16);`);
+ assert.equal(e.run('bank.length'),4104);assert.equal(e.run('DX7Codec.parse(bank).channel'),16);assert.equal(e.run('JSON.stringify(DX7Codec.parse(bank).voices)===JSON.stringify(voices)'),true);
+ assert.equal(e.run('DX7Codec.bulk(voices[0]).length'),163);assert.equal(e.run('DX7Codec.parse(DX7Codec.bulk(voices[0])).voices[0].name'),'TEST 0');
+ assert.throws(()=>e.run('var bad=bank.slice();bad[10]^=1;DX7Codec.parse(bad)'),/checksum/);assert.throws(()=>e.run('DX7Codec.parse(bank.slice(1))'),/dump/);assert.throws(()=>e.run('DX7Codec.bulk(voices.slice(1))'),/32/);assert.throws(()=>e.run('DX7Codec.bulk(voices[0],0)'),/channel/);assert.throws(()=>e.run('var bad=DX7Codec.encode(voices[0]);bad[0]=100;DX7Codec.decode(bad)'),/R1/);
+});
+
+test('DX7 file import validates before applying and undo restores the old compare baseline',async()=>{
+ const e=editor();e.get('#dialog').close=()=>{};e.get('#engine-6op').onclick();e.run("change('R1',22);setupVoiceFiles();var imported=DX7.createVoice();imported.name='IMPORTED';imported.operators[0].R1=55;var fileBytes=DX7Codec.bulk(imported)");
+ await e.get('#load-syx').onchange({target:{files:[{arrayBuffer:async()=>e.run('fileBytes.buffer')}]}});assert.equal(e.run('voice.name'),'IMPORTED');assert.equal(e.run('initial.name'),'IMPORTED');e.run('undoVoice()');assert.equal(e.run('voice.operators[0].R1'),22);assert.equal(e.run('initial.operators[0].R1'),99);
+ e.run('fileBytes[12]^=1');await e.get('#load-syx').onchange({target:{files:[{arrayBuffer:async()=>e.run('fileBytes.buffer')}]}});assert.match(e.get('#file-result').textContent,/checksum/);assert.equal(e.run('voice.operators[0].R1'),22);
+ e.run('fileBytes=DX7Codec.bulk(Array.from({length:32},()=>imported))');await e.get('#load-syx').onchange({target:{files:[{arrayBuffer:async()=>e.run('fileBytes.buffer')}]}});assert.equal(e.get('#bank-voices').children.length,32);assert.equal(e.run('voice.operators[0].R1'),22);e.get('#bank-voices').children[31].onclick();assert.equal(e.run('voice.name'),'IMPORTED');
+});
+
+
+test('live MIDI emits parameter edits, compare and undo and cancels across engines',async()=>{
+ const e=editor('',true);e.run("var sent=[];MidiUI.transport.output={state:'connected',send:b=>sent.push(Array.from(b)),clear(){}};MidiUI.transport.delay=async()=>{};MidiUI.config().live=true;change('AR',15)");
+ await new Promise(r=>setImmediate(r));
+ assert.deepEqual(Array.from(e.run('sent[0]')),[240,67,16,18,39,15,247]);
+ e.get('#compare').onclick();await new Promise(r=>setImmediate(r));assert.equal(e.run('sent.at(-1)[5]'),27);
+ e.get('#compare').onclick();e.run('undoVoice()');await new Promise(r=>setImmediate(r));assert.equal(e.run('sent.at(-1)[5]'),27);
+ e.get('#engine-6op').onclick();assert.equal(e.run('MidiUI.config().live'),false);
+ e.run('sent=[]');e.run("change('R1',50)");assert.equal(e.run('sent.length'),0);
+});
+test('armed YS200 receive commits all extensions atomically and undo restores effects',()=>{
+ const e=editor('',true);e.run("MidiUI.transport.input={state:'connected'};MidiUI.transport.output={state:'connected',send(){},clear(){}};var imported=YS200Profile.createVoice();imported.name='RECEIVED';imported.effects={preset:9,time:40,balance:99};var frames=MidiProtocol.split(YS200Codec.bulk(imported));MidiUI.arm();");
+ for(let n=0;n<3;n++){e.run(`MidiUI.receive(frames[${n}])`);assert.equal(e.run('voice.name'),'DemoVoice');}
+ e.run('MidiUI.receive(frames[3])');assert.equal(e.run('voice.name'),'RECEIVED');assert.equal(e.run('EffectsUI.getState().balance'),99);
+ e.run('undoVoice()');assert.equal(e.run('voice.name'),'DemoVoice');assert.equal(e.run('EffectsUI.getState().balance'),50);
+});
+test('incoming MIDI is filtered by engine and channel and never echoed',()=>{
+ const e=editor('',true);e.run("var sent=[];MidiUI.transport.output={state:'connected',send:b=>sent.push(Array.from(b)),clear(){}};MidiUI.config().live=true;MidiUI.receive(MidiProtocol.parameter(18,39,12,2));");assert.equal(e.run('voice.operators[0].AR'),27);
+ e.run('MidiUI.receive(MidiProtocol.parameter(0,0,12,1))');assert.equal(e.run('voice.operators[0].AR'),27);
+ e.run('MidiUI.receive(MidiProtocol.parameter(18,39,12,1))');assert.equal(e.run('voice.operators[0].AR'),12);assert.equal(e.run('sent.length'),0);
+});
+test('live effects emit EFEDS addresses and incoming voice parameters preserve current effects',async()=>{
+ const e=editor('',true);e.run("var sent=[];MidiUI.transport.output={state:'connected',send:b=>sent.push(Array.from(b)),clear(){}};MidiUI.transport.delay=async()=>{};MidiUI.config().live=true;");e.get('#show-effects').onclick();const input=e.get('#fx-time');input.value='35';input.oninput();await new Promise(r=>setImmediate(r));assert.deepEqual(Array.from(e.run('sent.at(-1)')),[240,67,16,36,5,35,247]);
+ e.run('MidiUI.receive(MidiProtocol.parameter(18,39,12))');assert.equal(e.run('EffectsUI.getState().time'),35);
+});
+test('receive timeout and corrupt dumps leave the existing voice unchanged',()=>{
+ const e=editor('',true);e.run("MidiUI.transport.input={state:'connected'};MidiUI.transport.output={state:'connected',send(){},clear(){}};MidiUI.arm();var bytes=YS200Codec.bulk(YS200Profile.createVoice());bytes[17]^=1;MidiUI.receive(MidiProtocol.split(bytes)[0]);");assert.equal(e.run('voice.name'),'DemoVoice');assert.match(e.get('#status').textContent,/checksum/);
+ e.run("MidiUI.arm()");const timeout=[...e.timers.values()].find(t=>t.ms===30000);timeout.fn();assert.match(e.get('#status').textContent,/No complete dump/);assert.equal(e.run('history.length'),0);
+});
+
+test('native file workflow imports standalone effects and matching JSON, rejects another engine',async()=>{
+ const e=editor('',true);e.run("MidiUI.files();var bytes=Effects.bulk({preset:10,time:40,balance:99})");
+ await e.get('#load-syx').onchange({target:{files:[{name:'effects.syx',arrayBuffer:async()=>e.run('bytes.buffer')}]}});assert.equal(e.run('EffectsUI.getState().preset'),10);
+ e.run("var snapshot=Synths.snapshot(synth,voice);snapshot.voice.name='SNAPSHOT';snapshot.voice.operators[0].on=0;");
+ const json=Buffer.from(e.run('JSON.stringify(snapshot)'));await e.get('#load-syx').onchange({target:{files:[{name:'voice.json',arrayBuffer:async()=>json}]}});assert.equal(e.run('voice.name'),'SNAPSHOT');assert.equal(e.run('voice.operators[0].on'),0);
+ const wrong=Buffer.from(e.run("snapshot.synthId='dx7';JSON.stringify(snapshot)"));await e.get('#load-syx').onchange({target:{files:[{name:'wrong.json',arrayBuffer:async()=>wrong}]}});assert.match(e.get('#file-result').textContent,/selected synth/);assert.equal(e.run('voice.name'),'SNAPSHOT');
+});
+
+test('YS200 Config assignments use native destination amounts and support undo',async()=>{
+ const e=editor('',true);e.run("openDialog('control')");
+ assert.equal(e.get('#dialog-title').textContent,'YS200 CONFIG');
+ const mod=e.get('#config-vced-71-enabled');mod.checked=true;await mod.onchange();
+ assert.equal(e.run('YS200Codec.encode(voice).vced[71]'),1);
+ mod.checked=false;await mod.onchange();assert.equal(e.run('YS200Codec.encode(voice).vced[71]'),0);
+ e.run('undoVoice()');assert.equal(e.run('YS200Codec.encode(voice).vced[71]'),1);
+ const aftertouch=e.get('#config-aced2-1-enabled');aftertouch.checked=true;await aftertouch.onchange();
+ assert.equal(e.run('YS200Codec.encode(voice).aced2[1]'),1);
+ assert.equal(e.run('YS200Codec.encode(voice).aced2[0]'),0);
+ e.run('undoVoice()');assert.equal(e.run('YS200Codec.encode(voice).aced2[1]'),0);
 });

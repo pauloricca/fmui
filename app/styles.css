@@ -1,9 +1,12 @@
 @font-face{font-family:Atari;src:url('fonts/VT323-Regular.ttf') format('truetype');font-display:swap}
-:root{color-scheme:light;--paper:#fff;--ink:#000;--gap:4px;--dither:repeating-conic-gradient(#000 0% 25%,#fff 0% 50%) 0 0/2px 2px}
+:root{color-scheme:light;--paper:#fff;--ink:#000;--gap:4px;--dither:repeating-conic-gradient(#000 0% 25%,#fff 0% 50%) 0 0/2px 2px;--lcd-overlay-colour:#d8ff9d}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 /* Override native focus rings for pointer and programmatic focus, including SVG. */
 :focus,:focus-visible{outline:none}
 body{margin:0;background:white;color:black;font:20px/1 Atari,monospace;-webkit-font-smoothing:none}
+/* A multiply blend preserves the black pixel artwork while turning its white
+   phosphor into the configurable LCD colour. It never intercepts controls. */
+html[data-display-overlay=true] body::before{content:'';position:fixed;inset:0;background:var(--lcd-overlay-colour);mix-blend-mode:multiply;pointer-events:none;z-index:2147483647;    box-shadow: inset 0 0 30px 0 rgba(0, 0, 0, 0.5);}
 button,input{font:inherit;color:inherit;border-radius:0}
 button{position:relative;--bevel:3px;background:white;border:0;padding:2px 6px;cursor:pointer}
 /* Crisp diagonal corners and light top/left edges, like the original Atari buttons.
@@ -18,13 +21,17 @@ button:disabled{cursor:default;color:#777}button:disabled:hover{outline:0}
 .window-title{height:30px;flex:none;border-bottom:2px solid black;display:flex;align-items:stretch;background:repeating-linear-gradient(0deg,white 0px,white 2px,black 2px,black 3px)}
 .window-title h1{margin:0 auto;padding:3px 20px;background:white;font:22px/1 Atari,monospace;letter-spacing:1px;align-self:stretch}
 .window-title>button{background:white;color:black;width:28px;padding:0;border:0;display:grid;place-items:center;flex:none;font-size:24px}
+#display-overlay{width:38px;font-size:16px}
 .window-title>.window-box{border-right:2px solid black}.window-title>#zoom{border-left:2px solid black}
 .editor-screen{padding:12px 8px 0;display:grid;grid-template-rows:16px minmax(130px,1fr) auto minmax(142px,1.1fr) 16px;flex:1;min-height:0}
-.commands{display:grid;grid-template-columns:1.4fr repeat(7,minmax(0,1fr));gap:8px;padding:8px;border:4px double black;background:var(--dither);margin:0 8px 12px}
+.commands{display:grid;grid-template-columns:48px minmax(140px,1.4fr) repeat(4,minmax(0,1fr));grid-template-rows:repeat(2,minmax(36px,auto));gap:8px;padding:8px;border:4px double black;background:var(--dither);margin:0 8px 12px}
 .commands>button,.voice-name{min-width:0;min-height:0;background:white}
 .commands>button{border:0;background:white}.commands>button:active{background:black}
 .voice-name{display:flex;flex-direction:column;justify-content:center;border:2px solid black;padding:4px;font-size:20px;font-weight:bold}
 .voice-name input{font-size:22px;background:white;border:0;padding:0;width:100%;min-width:0}
+.voice-name{grid-column:2;grid-row:1 / 3}.engine-switch{grid-column:1;grid-row:1 / 3}
+#show-voice{grid-column:3;grid-row:1}#midi-settings{grid-column:4;grid-row:1}#transmit{grid-column:5;grid-row:1}#compare{grid-column:6;grid-row:1}
+#show-effects,#show-pitch{grid-column:3;grid-row:2}#device-controls{grid-column:4;grid-row:2}#receive{grid-column:5;grid-row:2}#seed{grid-column:6;grid-row:2}
 .group-captions,.bottom-captions,.sliders{display:grid;grid-template-columns:repeat(var(--control-count,16),minmax(0,1fr));column-gap:var(--gap)}
 .group-captions,.bottom-captions{font-size:15px;text-align:center;line-height:14px}
 .group-captions span:nth-child(1){grid-column:1/3}.group-captions span:nth-child(2){grid-column:3/9}.group-captions span:nth-child(3){grid-column:9/14}.group-captions span:nth-child(4){grid-column:14/17}
@@ -60,12 +67,12 @@ button:disabled{cursor:default;color:#777}button:disabled:hover{outline:0}
 .bottom-captions span{border:1px solid black;border-top:0}.bottom-captions span:nth-child(1){grid-column:1/7}.bottom-captions span:nth-child(2){grid-column:7/13}.bottom-captions span:nth-child(3){grid-column:13/14}.bottom-captions span:nth-child(4){grid-column:14/16}.bottom-captions span:nth-child(5){grid-column:16/17}
 .editor-status{margin-top:8px;padding:5px 8px;display:flex;justify-content:space-between;border-top:1px solid black;font-size:16px;flex:none;gap:12px;min-height:27px}
 dialog{background:white;color:black;border:4px double black;box-shadow:5px 5px 0 black;width:480px;padding:22px;font:22px/1.15 Atari,monospace}
-dialog::backdrop{background:repeating-conic-gradient(#0005 0% 25%,transparent 0% 50%) 0 0/2px 2px}dialog h2{font-size:25px;margin:0 0 20px;text-align:center}dialog p{margin:12px 0}dialog a{color:black}dialog .dialog-ok{display:block;margin:24px auto 0;min-width:110px;border:0;box-shadow:none}dialog .dialog-actions{display:flex;gap:12px;justify-content:center}
+dialog::backdrop{background:repeating-conic-gradient(#0005 0% 25%,transparent 0% 50%) 0 0/2px 2px}dialog h2{font-size:25px;margin:0 0 20px;text-align:center}dialog p{margin:12px 0}dialog a{color:black}dialog .dialog-actions{display:flex;gap:12px;justify-content:center}
 @media(min-height:850px){.editor-screen{grid-template-rows:16px minmax(160px,1fr) auto minmax(175px,1.1fr) 16px;padding-top:14px}.operator-card{grid-template-rows:44px minmax(110px,17dvh) 41px}.operator-meta{line-height:13px}}
 .unavailable{display:grid;place-items:center;font-size:17px;color:#666;cursor:help}
 .unavailable:before,.unavailable:after{display:none}
-.global-row{display:grid;grid-template-columns:120px minmax(0,1fr);gap:4px;min-height:0}
-.group-captions{margin-left:124px}
+.global-row{display:grid;grid-template-columns:var(--algorithm-width,120px) minmax(0,1fr);gap:4px;min-height:0}
+.group-captions{margin-left:calc(var(--algorithm-width,120px) + 4px)}
 #algorithm-diagram{display:flex;flex-direction:column;min-height:0;border:1px solid black}
 #algorithm-diagram .control-title{border:0;border-bottom:1px solid black;height:19px;text-align:center}
 #algorithm-diagram svg{width:100%;flex:1;min-height:0;display:block;shape-rendering:crispEdges}
@@ -130,7 +137,7 @@ button:disabled{color:#777}
   display:none;
 }
 
-.window>.commands{flex:none;height:88px;margin:12px 16px 0}
+.window>.commands{flex:none;height:auto;min-height:104px;margin:12px 16px 0}
 
 .commands>button{font-size:20px;font-weight:bold;line-height:1;padding:4px;text-decoration:none;align-self:stretch}
 
@@ -147,3 +154,78 @@ button:disabled{color:#777}
 .env-label{font:10px Atari,monospace;fill:black;stroke:white;stroke-width:2;paint-order:stroke;pointer-events:none}
 .env-guide:hover .env-line,.env-guide.active .env-line{stroke-dasharray:none;stroke-width:2}
 .env-guide:hover .env-anchor,.env-guide.active .env-anchor{fill:black}
+
+/* Link parameter hover to the selected operator without rerendering controls. */
+.editor-screen:has(.control:is([data-parameter=AR],[data-parameter=D1R],[data-parameter=D1L],[data-parameter=D2R],[data-parameter=RR]):hover) .operator-card.selected .env-guides{opacity:1}
+.editor-screen:has(.control[data-parameter=AR]:hover) .operator-card.selected .env-guide[data-key=AR],
+.editor-screen:has(.control[data-parameter=D1R]:hover) .operator-card.selected .env-guide[data-key=D1R],
+.editor-screen:has(.control[data-parameter=D1L]:hover) .operator-card.selected .env-guide[data-key=D1L],
+.editor-screen:has(.control[data-parameter=D2R]:hover) .operator-card.selected .env-guide[data-key=D2R],
+.editor-screen:has(.control[data-parameter=RR]:hover) .operator-card.selected .env-guide[data-key=RR]{--guide-dash:none;--guide-width:2;--anchor-fill:black}
+.env-line{stroke-dasharray:var(--guide-dash,2 3);stroke-width:var(--guide-width,1)}
+.env-anchor{fill:var(--anchor-fill,white)}
+
+/* Engine selection shares the original command bar vocabulary. */
+.engine-switch{display:grid;grid-template-rows:1fr 1fr;gap:4px}
+.engine-switch button{font-size:20px;font-weight:bold;padding:0}
+.window[data-engine=dx7]{min-width:1100px;--algorithm-width:180px}
+.window[data-engine=dx7] .operator-top{display:flex;justify-content:flex-end;gap:3px}
+.window[data-engine=dx7] .operator-toggle{width:42px}
+.window[data-engine=dx7] .operator-select{width:40px}
+.window[data-engine=dx7] .wave-preview,.window[data-engine=dx7] .wave-options{display:none}
+.window[data-engine=dx7] .operator-meta{font-size:13px}
+.window[data-engine=dx7] .control-title{font-size:18px}
+.window[data-engine=dx7] .options button{font-size:15px}
+#pitch-preview{border:1px solid black;min-height:0;display:flex;flex-direction:column;grid-column:1;grid-row:4;margin-right:67%;font-size:16px;text-align:center;padding:4px}
+#pitch-preview svg{width:100%;min-height:0;flex:1}
+.editor-screen:has(#pitch-preview:not([hidden])) #operator-controls{grid-column:1;grid-row:4;margin-left:34%}
+#bank-voices{display:grid;grid-template-columns:1fr 1fr;gap:5px;max-height:260px;overflow:auto}
+#bank-voices button{text-align:left;font-size:18px}
+#load-syx{max-width:100%;font-size:18px}
+
+/* Native DX7 EG controls share the selected-card hover guidance. */
+.editor-screen:has(.control:is([data-parameter=R1],[data-parameter=R2],[data-parameter=R3],[data-parameter=R4],[data-parameter=L1],[data-parameter=L2],[data-parameter=L3],[data-parameter=L4]):hover) .operator-card.selected .env-guides{opacity:1}
+.editor-screen:has(.control[data-parameter=R1]:hover) .operator-card.selected .env-guide[data-key=R1],
+.editor-screen:has(.control[data-parameter=R2]:hover) .operator-card.selected .env-guide[data-key=R2],
+.editor-screen:has(.control[data-parameter=R3]:hover) .operator-card.selected .env-guide[data-key=R3],
+.editor-screen:has(.control[data-parameter=R4]:hover) .operator-card.selected .env-guide[data-key=R4],
+.editor-screen:has(.control[data-parameter=L1]:hover) .operator-card.selected .env-guide[data-key=L1],
+.editor-screen:has(.control[data-parameter=L2]:hover) .operator-card.selected .env-guide[data-key=L2],
+.editor-screen:has(.control[data-parameter=L3]:hover) .operator-card.selected .env-guide[data-key=L3],
+.editor-screen:has(.control[data-parameter=L4]:hover) .operator-card.selected .env-guide[data-key=L4]{--guide-dash:none;--guide-width:2;--anchor-fill:black}
+
+.midi-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}.midi-fields label,fieldset label{display:block;margin:8px 0}dialog{max-height:85vh;overflow:auto}dialog input[type=number]{width:85px}dialog fieldset{margin:12px 0}#bank-voices{max-height:260px;overflow:auto}#bank-voices>div{display:flex;justify-content:space-between;gap:8px;margin:4px 0}#midi-status{min-height:1.2em}
+.midi-fields > p {grid-column:1 / -1;margin:0 0 8px}.midi-fields input[type=number]{display:block;width:100%;box-sizing:border-box}.midi-fields label{min-width:0}.midi-fields select{max-width:100%}
+
+.midi-fields select{display:block;width:100%;min-height:32px;font-size:18px}
+
+.controller-assignments{grid-column:1 / -1;border:3px double black;padding:8px 12px;min-width:0}
+.controller-assignments legend{padding:0 6px;text-transform:uppercase}
+.assignment-route{display:grid;grid-template-columns:minmax(0,1fr) 90px;gap:12px;align-items:center}
+.assignment-route>label:first-child{display:flex;align-items:center;gap:8px;text-transform:capitalize}
+.assignment-route input[type=checkbox]{appearance:none;width:20px;height:20px;flex:none;border:2px solid black;background:white;box-shadow:inset 2px 2px white,inset -2px -2px black;margin:0}
+.assignment-route input[type=checkbox]:checked{background:black;box-shadow:inset 0 0 0 3px white}
+.assignment-route input:disabled{opacity:.45}
+
+/* Custom selectors share the raised button face; the entire popup is monochrome. */
+.retro-select{display:inline-block;position:relative;min-width:72px;vertical-align:middle}
+.midi-fields .retro-select{display:block;width:100%;min-width:0}
+.retro-select-button{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:40px;padding:8px 12px;border:0;--bevel:3px;font:20px/1 Atari,monospace;text-align:left}
+.retro-select-caption{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.retro-select-arrow{flex:none;width:18px;height:11px;background:currentColor;clip-path:polygon(0 0,100% 0,50% 100%)}
+.retro-select-menu{position:fixed;inset:auto;margin:0;padding:4px;border:0;border-radius:0;background:white;color:black;box-shadow:inset 3px 3px white,inset -3px -3px black,3px 3px black;overflow:auto;z-index:10000;font:20px/1.1 Atari,monospace;overscroll-behavior:contain}
+.retro-select-menu [role=option]{position:relative;padding:7px 12px 7px 26px;min-height:34px;cursor:pointer;white-space:normal}
+.retro-select-menu [aria-selected=true]::before{content:'◆';position:absolute;left:7px;font-size:14px;top:9px}
+.retro-select-menu .active:not([aria-disabled=true]){background:black;color:white}
+.retro-select-menu [aria-disabled=true]{color:#777;cursor:default}
+.retro-select-button[aria-expanded=true]::after{border-color:black white white black}
+
+/* Modal windows use the same striped title bar as the editor. */
+dialog{padding:0;overflow:hidden}
+dialog[open]{display:flex;flex-direction:column}
+.dialog-titlebar{height:32px;min-height:32px;flex:none}
+.dialog-titlebar h2{margin:0 auto;padding:3px 10px;background:white;font:22px/1 Atari,monospace;align-self:stretch;max-width:calc(100% - 36px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dialog-titlebar #dialog-close{width:30px;border-right:2px solid black;flex:none;font:26px/1 Atari,monospace}
+#dialog-content{padding:16px 20px 20px;min-height:0;overflow:auto;overscroll-behavior:contain}
+#dialog-content.midi-fields{margin:0}
+dialog input[type=number],dialog input[type=text],dialog .retro-select-button{height:32px;min-height:32px;font-size:20px;line-height:1;padding-top:4px;padding-bottom:4px}

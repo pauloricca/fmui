@@ -39,8 +39,13 @@ const YS200 = (() => {
     stages.forEach((stage,i)=>{x+=stage.time===0?0:1+available*weights[i]/total;points.push([x,y(stage.level)]);});
     points[points.length-1][0]=247;
     const hold=op.D1R===0&&sustain<1?'D1 HOLD':op.D2R===0&&sustain>0?'D2 HOLD':'';
-    const guides=stages.map((stage,n)=>({key:stage.key,axis:'x',position:(points[n][0]+points[n+1][0])/2}));
-    guides.push({key:'D1L',axis:'y',position:y(sustain)});
+    const guides=stages.map((stage,n)=>({key:stage.key,axis:'x',x:points[n+1][0],y:points[n+1][1]}));
+    // The level handle shares the first-decay corner. A first-decay hold
+    // never reaches that level, so there is no corresponding plotted handle.
+    if(op.D1R!==0||sustain===1){
+      const corner=sustain===1?points[1]:points[2];
+      guides.push({key:'D1L',axis:'y',x:corner[0],y:corner[1]});
+    }
     return {points,offLevel,sustain,attack,shift,hold,guides};
   }
   const algorithms = [

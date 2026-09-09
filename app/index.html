@@ -3,34 +3,36 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>YS200 · YSEDITOR Tribute</title>
-<link rel="stylesheet" href="styles.css"><script src="ys200.js" defer></script><script src="effects.js" defer></script><script src="ys200-profile.js" defer></script><script src="synths.js" defer></script><script src="editor.js" defer></script><script src="effects-ui.js" defer></script>
+<link rel="stylesheet" href="styles.css?v=lcd-overlay-20260908"><script src="ys200.js?v=command-order-20260908" defer></script><script src="effects.js?v=command-order-20260908" defer></script><script src="ys200-profile.js?v=command-order-20260908" defer></script><script src="dx7.js?v=command-order-20260908" defer></script><script src="dx7-profile.js?v=command-order-20260908" defer></script><script src="synths.js?v=command-order-20260908" defer></script><script src="editor.js?v=lcd-overlay-20260908" defer></script><script src="effects-ui.js?v=command-order-20260908" defer></script><script src="midi-protocol.js?v=command-order-20260908" defer></script><script src="midi-transport.js?v=command-order-20260908" defer></script><script src="retro-select.js?v=command-order-20260908" defer></script><script src="midi-ui.js?v=command-order-20260908" defer></script>
 </head>
 <body>
 <main>
 <section class="window" aria-label="YSEditor voice editor">
-<header class="window-title"><button class="window-box" data-dialog="file" aria-label="File menu">◆</button><h1>YSEDITOR / YAMAHA YS200</h1><button id="zoom" aria-label="Toggle fullscreen">↗</button></header>
+<header class="window-title"><h1>YAMAHA 4-OP EDITOR</h1><button id="display-overlay" aria-pressed="false" title="Toggle LCD display colour">LCD</button><button id="zoom" aria-label="Toggle fullscreen">↗</button></header>
 <div class="commands">
+<div class="engine-switch" role="group" aria-label="FM engine"><button id="engine-6op" aria-pressed="false" title="Yamaha DX7">6-OP</button><button id="engine-4op" aria-pressed="true" title="Yamaha YS200">4-OP</button></div>
 <label class="voice-name">VOICENAME:<input id="voice-name" maxlength="10" value="FloatChime" aria-label="Voice name"></label>
-<button id="receive">RECEIVE VOICE</button><button id="transmit">SEND VOICE</button>
+<button id="midi-settings">MIDI</button><button id="device-controls">CONFIG</button><button id="receive">RECEIVE VOICE</button><button id="transmit">SEND VOICE</button>
 <button id="show-voice" aria-pressed="true" aria-controls="voice-screen">VOICE</button><button id="show-effects" aria-pressed="false" aria-controls="effects-screen">EFFECT</button>
-<button id="seed">RANDOMISE</button><button id="compare" aria-pressed="false">COMPARE</button><button id="undo">UNDO</button>
+<button id="show-pitch" hidden aria-pressed="false">PITCH</button><button id="seed">RANDOMISE</button><button id="compare" aria-pressed="false">COMPARE</button>
 </div>
 <div id="voice-screen" class="editor-screen">
 <div class="group-captions"><span></span><span>LOW FREQUENCY OSCILLATOR</span><span>SENSITIVITY</span><span></span></div>
 <div class="global-row"><section id="algorithm-diagram" aria-label="Algorithm routing diagram"></section>
 <section id="global-controls" class="sliders globals" aria-label="Global voice parameters"></section></div>
 <section id="operators" class="operators" aria-label="Four operators"></section>
+<div id="pitch-preview" hidden></div>
 <section id="operator-controls" class="sliders lower" aria-label="Selected operator parameters"></section>
 <div class="bottom-captions"><span>OSCILLATOR</span><span>ENVELOPE GENERATOR</span><span>REV</span><span>KBD SCALING</span><span>OUT</span></div>
 </div>
 <section id="effects-screen" class="effects-screen" hidden aria-label="Effects editor">
 <div class="effects-layout"><section class="effect-programs"><h2>EFFECT PROGRAM</h2><div id="fx-programs"></div></section>
 <section class="effect-detail"><h2 id="fx-name"></h2><div class="effect-controls" id="fx-controls"></div><div class="effect-readout"><p id="fx-summary"></p><p id="fx-description"></p><p>TIME / SIZE: MIDI INDEX 0–40</p><p>BALANCE 0 = EFFECT OFF</p></div></section>
-<section class="effect-routing"><h2>SIGNAL FLOW</h2><svg viewBox="0 0 240 300" role="img" aria-label="Conceptual dry and effect signal paths combined at output"><g fill="none" stroke="black" stroke-width="2"><path d="M120 42V70H45V205H100M120 70H195V110M195 160V205H140M120 225V255"/><rect x="72" y="12" width="96" height="30"/><rect x="151" y="110" width="88" height="50"/><rect x="100" y="185" width="40" height="40"/><rect x="72" y="255" width="96" height="30"/></g><g text-anchor="middle" font-family="Atari" font-size="20"><text x="120" y="34">VOICE</text><text x="195" y="140">EFFECT</text><text x="120" y="212">+</text><text x="120" y="277">OUTPUT</text><text x="45" y="100">DRY</text></g></svg><p>CONCEPTUAL SIGNAL FLOW</p><label>MIDI CHANNEL <select id="fx-channel" aria-label="Effects export MIDI channel"></select></label><p><button id="fx-save">SAVE .SYX</button></p><p>LOCAL EDIT / SYSEX EXPORT</p><p>ENVELOPE REV IS SEPARATE AND REMAINS IN THE VOICE VIEW.</p></section></div>
+<section class="effect-routing"><h2>SIGNAL FLOW</h2><svg viewBox="0 0 240 300" role="img" aria-label="Conceptual dry and effect signal paths combined at output"><g fill="none" stroke="black" stroke-width="2"><path d="M120 42V70H45V205H100M120 70H195V110M195 160V205H140M120 225V255"/><rect x="72" y="12" width="96" height="30"/><rect x="151" y="110" width="88" height="50"/><rect x="100" y="185" width="40" height="40"/><rect x="72" y="255" width="96" height="30"/></g><g text-anchor="middle" font-family="Atari" font-size="20"><text x="120" y="34">VOICE</text><text x="195" y="140">EFFECT</text><text x="120" y="212">+</text><text x="120" y="277">OUTPUT</text><text x="45" y="100">DRY</text></g></svg><p>CONCEPTUAL SIGNAL FLOW</p><label>MIDI CHANNEL <select id="fx-channel" aria-label="Effects export MIDI channel"></select></label><p><button id="fx-save">SAVE .SYX</button></p><p>VOICE MIDI CONNECTION / SYSEX EXPORT</p><p>ENVELOPE REV IS SEPARATE AND REMAINS IN THE VOICE VIEW.</p></section></div>
 </section>
 <footer class="editor-status"><span id="status" role="status">READY. SELECT A SLIDER OR OPERATOR.</span><span id="edit-state">EDIT BUFFER</span></footer>
 </section>
 </main>
-<dialog id="dialog"><form method="dialog"><h2 id="dialog-title"></h2><div id="dialog-content"></div><button class="dialog-ok">OK</button></form></dialog>
+<dialog id="dialog" aria-labelledby="dialog-title"><header class="window-title dialog-titlebar"><button type="button" id="dialog-close" aria-label="Close dialog">×</button><h2 id="dialog-title"></h2></header><div id="dialog-content"></div></dialog>
 </body>
 </html>
