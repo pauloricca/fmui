@@ -1,0 +1,14 @@
+[package]
+name = "yamaha-instruments"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+build = "build.rs"
+
+[dependencies]
+dx7 = { path = "vendor/dx7" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+

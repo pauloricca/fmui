@@ -1,15 +1,19 @@
-@font-face{font-family:Atari;src:url('fonts/VT323-Regular.ttf') format('truetype');font-display:swap}
-:root{color-scheme:light;--paper:#fff;--ink:#000;--gap:4px;--dither-light:repeating-conic-gradient(#000 0% 25%,#fff 0% 100%) 0 0/2px 2px;--dither:repeating-conic-gradient(#000 0% 25%,#fff 0% 50%) 0 0/2px 2px;--lcd-overlay-colour:#d8ff9d}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+@font-face{font-family:Atari;src:url('fonts/VT323-Regular.ttf') format('truetype');font-display:block}
+:root{color-scheme:light;--paper:#fff;--ink:#000;--gap:4px;--dither-light:repeating-conic-gradient(#000 0% 25%,#fff 0% 100%) 0 0/2px 2px;--dither:repeating-conic-gradient(#000 0% 25%,#fff 0% 50%) 0 0/2px 2px;--lcd-overlay-colour:#c1cf82;--lcd-ink-colour:#24301b}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+/* Keep selection available inside editable text and number fields. */
+input:not([type]):read-write,input[type=text]:read-write,input[type=number]:read-write,textarea:read-write,[contenteditable=true],[contenteditable=true] *{-webkit-user-select:text;user-select:text}
 /* Override native focus rings for pointer and programmatic focus, including SVG. */
 :focus,:focus-visible{outline:none}
 body{margin:0;background:white;color:black;font:20px/1 Atari,monospace;-webkit-font-smoothing:none}
-/* A multiply blend preserves the black pixel artwork while turning its white
-   phosphor into the configurable LCD colour. It never intercepts controls. */
-html[data-display-overlay=true] body::before{content:'';position:fixed;inset:0;background:var(--lcd-overlay-colour);mix-blend-mode:multiply;pointer-events:none;z-index:2147483647;    box-shadow: inset 0 0 30px 0 rgba(0, 0, 0, 0.5);}
+/* Multiply tints the white pixels; a second lighten overlay lifts black to
+   dark green without changing the LCD background. Neither intercepts controls. */
+html[data-display-overlay=true] body::before{content:'';position:fixed;inset:0;background:var(--lcd-overlay-colour);mix-blend-mode:multiply;pointer-events:none;z-index:2147483646;    box-shadow: inset 0 0 30px 0 rgba(0, 0, 0, 0.5);}
+html[data-display-overlay=true] body::after{content:'';position:fixed;inset:0;background:var(--lcd-ink-colour);mix-blend-mode:lighten;pointer-events:none;z-index:2147483647}
 /* Modal dialogs occupy the browser's top layer, above the body overlay.
    Tint their surface separately; the content scrolls beneath this overlay. */
-html[data-display-overlay=true] dialog::after{content:'';position:absolute;inset:0;background:var(--lcd-overlay-colour);mix-blend-mode:multiply;pointer-events:none;z-index:2147483647}
+html[data-display-overlay=true] dialog::after{content:'';position:absolute;inset:0;background:var(--lcd-overlay-colour);mix-blend-mode:multiply;pointer-events:none;z-index:2147483646}
+html[data-display-overlay=true] dialog::before{content:'';position:absolute;inset:0;background:var(--lcd-ink-colour);mix-blend-mode:lighten;pointer-events:none;z-index:2147483647}
 /* The overlay stops at the padding edge; colour the double-border gap beneath it. */
 html[data-display-overlay=true] dialog{background:linear-gradient(white,white) padding-box,var(--lcd-overlay-colour) border-box}
 button,input{font:inherit;color:inherit;border-radius:0}
@@ -27,9 +31,10 @@ button:disabled{cursor:var(--cursor-default,default);color:#777}button:disabled:
 .window-title h1{margin:0 auto;padding:3px 20px;background:white;font:22px/1 Atari,monospace;letter-spacing:1px;align-self:stretch}
 .window-title>button{background:white;color:black;width:28px;padding:0;border:0;display:grid;place-items:center;flex:none;font-size:24px}
 #display-overlay{width:38px;font-size:16px}
+.fullscreen-icon{display:block;width:14px;height:14px;flex:none}
 .window-title>.window-box{border-right:2px solid black}.window-title>#zoom{border-left:2px solid black}
 .editor-screen{padding:12px 8px 0;display:grid;grid-template-rows:16px minmax(130px,1fr) auto minmax(142px,1.1fr) 16px;flex:1;min-height:0}
-.commands{display:grid;grid-template-columns:48px minmax(140px,1.4fr) repeat(5,minmax(0,1fr));grid-template-rows:repeat(2,minmax(36px,auto));gap:8px;padding:8px;border:4px double black;background:var(--dither);margin:0 8px 12px}
+.commands{display:grid;grid-template-columns:48px minmax(140px,1.4fr) repeat(5,minmax(0,1fr)) 60px;grid-template-rows:repeat(2,minmax(36px,auto));gap:8px;padding:8px;border:4px double black;background:var(--dither);margin:0 8px 12px}
 .commands>button,.voice-name{min-width:0;min-height:0;background:white}
 .commands>button{border:0;background:white}.commands>button:active{background:black}
 .voice-name{display:flex;flex-direction:column;justify-content:center;border:2px solid black;padding:4px;font-size:20px;font-weight:bold}
@@ -50,7 +55,7 @@ button:disabled{cursor:var(--cursor-default,default);color:#777}button:disabled:
 .mapping-active .mapping-target{filter:none;opacity:1}
 .mapping-active .mapping-target,.mapping-active .mapping-target *{cursor:var(--cursor-pointer,pointer)}
 .mapping-active .mapping-target:hover .mapping-action,.mapping-active .mapping-target .mapping-action.has-mapping{display:block!important}
-.mapping-active .operator-top:has(.wave-options:hover)>.wave-map-action,.mapping-active .operator-top:has(.operator-toggle-host:hover)>.on-map-action,.mapping-active .operator-top>.mapping-action.has-mapping{display:block!important;pointer-events:auto}
+.mapping-active .operator-top:has(.wave-options:hover)>.wave-map-action,.mapping-active .operator-top:has(.operator-toggle-host:hover)>.on-map-action,.mapping-active .operator-top>.mapping-action:is(:hover,:focus-visible,.has-mapping){display:block!important;pointer-events:auto}
 .operator-top>.wave-map-action{left:calc(50% + 89px)}.operator-top>.on-map-action{left:94px;right:auto}
 .mapping-active .editor-screen :is(input,button),.mapping-active .effects-screen :is(input,button){pointer-events:none}
 .mapping-active .mapping-target .mapping-action{pointer-events:auto}
@@ -71,7 +76,7 @@ button:disabled{cursor:var(--cursor-default,default);color:#777}button:disabled:
 .options button{position:relative;flex:1;min-height:0;line-height:1;padding:0;font-size:19px;border:0;display:grid;place-items:center}
 .options:before,.options:after{display:none}
 .lfo-wave{position:absolute;inset:0;display:block;width:100%;height:100%;overflow:hidden;pointer-events:none}
-.lfo-wave path,.wave-preview polyline{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:miter;shape-rendering:crispEdges}
+.lfo-wave path,.wave-preview .wave-pixels{fill:currentColor;stroke:none;shape-rendering:crispEdges}
 .operators{display:grid;grid-template-columns:repeat(var(--operator-count,4),minmax(0,1fr));gap:var(--gap);padding:8px 0 6px}
 .operator-card{min-width:0;display:grid;grid-template-rows:40px minmax(92px,15dvh) 38px;gap:0}
 .operator-top{cursor:var(--cursor-pointer,pointer);position:relative;display:grid;grid-template-columns:32px 32px 42px 56px minmax(0,1fr);border:1px solid black;gap:3px;padding:3px;min-height:0}
@@ -86,10 +91,18 @@ button:disabled{cursor:var(--cursor-default,default);color:#777}button:disabled:
 .operator-toggle[aria-pressed=true]{background:white;color:black}.operator-toggle[aria-pressed=false]{background:black;color:white}
 .operator-select{font-size:27px;padding:0}
 .operator-role{display:flex;align-items:center;justify-content:center;border:1px solid black;font-size:27px;background:white;color:black}
-.envelope{width:100%;height:100%;border:1px solid black;border-top:0;display:block;background:white;cursor:var(--cursor-pointer,pointer);shape-rendering:crispEdges}
+.envelope-plot{position:relative;height:100%;background:white}
+.envelope-fill{position:absolute;inset:0 1px 1px;background:var(--dither);pointer-events:none}
+.envelope-fill-off{background:var(--dither-light)}
+.envelope{position:relative;width:100%;height:100%;border:1px solid black;border-top:0;display:block;background:transparent;cursor:var(--cursor-pointer,pointer);shape-rendering:crispEdges}
 .operator-meta{font-size:14px;line-height:12px;white-space:pre;overflow:hidden;padding-top:4px}
 .bottom-captions span{border:1px solid black;border-top:0}.bottom-captions span:nth-child(1){grid-column:1/7}.bottom-captions span:nth-child(2){grid-column:7/13}.bottom-captions span:nth-child(3){grid-column:13/14}.bottom-captions span:nth-child(4){grid-column:14/16}.bottom-captions span:nth-child(5){grid-column:16/17}
 .editor-status{margin-top:8px;padding:5px 8px;display:flex;justify-content:space-between;border-top:1px solid black;font-size:16px;flex:none;gap:12px;min-height:27px}
+#midi-connection{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+#midi-connection::before{content:"";width:10px;height:10px;flex:none;background:linear-gradient(45deg,transparent 42%,currentColor 42%,currentColor 58%,transparent 58%),linear-gradient(-45deg,transparent 42%,currentColor 42%,currentColor 58%,transparent 58%)}
+#midi-connection[data-connected="true"]::before{background:currentColor;border-radius:50%;animation:midi-connection-blink 1.2s step-end infinite}
+@keyframes midi-connection-blink{50%{opacity:0}}
+@media(prefers-reduced-motion:reduce){#midi-connection[data-connected="true"]::before{animation:none}}
 dialog{background:white;color:black;border:4px double black;box-shadow:5px 5px 0 black;width:480px;padding:22px;font:22px/1.15 Atari,monospace}
 dialog::backdrop{background:rgba(0,0,0,.18)}dialog h2{font-size:25px;margin:0 0 20px;text-align:center}dialog p{margin:12px 0}dialog a{color:black}dialog .dialog-actions{display:flex;gap:12px;justify-content:center}
 @media(min-height:850px){.editor-screen{grid-template-rows:16px minmax(160px,1fr) auto minmax(175px,1.1fr) 16px;padding-top:14px}.operator-card{grid-template-rows:44px minmax(110px,17dvh) 41px}.operator-meta{line-height:13px}}
@@ -254,16 +267,16 @@ dialog label:has(#midi-sustain){display:flex;align-items:center;gap:12px;min-hei
 .retro-select-button{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:40px;padding:8px 12px;border:0;--bevel:3px;font:20px/1 Atari,monospace;text-align:left}
 .retro-select-caption{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .retro-select-arrow{flex:none;width:18px;height:11px;background:currentColor;clip-path:polygon(0 0,100% 0,50% 100%)}
-.retro-select-menu{position:fixed;inset:auto;margin:0;padding:4px;border:0;border-radius:0;background:white;color:black;box-shadow:inset 3px 3px white,inset -3px -3px black,3px 3px black;overflow:auto;z-index:10000;font:20px/1.1 Atari,monospace;overscroll-behavior:contain}
-.retro-select-menu [role=option]{position:relative;padding:7px 12px 7px 26px;min-height:34px;cursor:var(--cursor-pointer,pointer);white-space:normal}
+.retro-select-menu{position:fixed;inset:auto;margin:0;padding:2px;border:1px solid black;border-radius:0;background:white;color:black;box-shadow:3px 3px 0 black;overflow:auto;z-index:10000;font:20px/1.1 Atari,monospace;overscroll-behavior:contain}
+.retro-select-menu [role=option]{position:relative;padding:7px 12px 7px 26px;min-height:34px;cursor:var(--cursor-pointer,pointer);white-space:normal;overflow-wrap:anywhere}
 .retro-select-menu [aria-selected=true]::before{content:'◆';position:absolute;left:7px;font-size:14px;top:9px}
 .retro-select-menu .active:not([aria-disabled=true]){background:black;color:white}
 .retro-select-menu [aria-disabled=true]{color:#777;cursor:var(--cursor-default,default)}
 /* Popovers sit above both LCD overlays. Tint their palette directly so the
-   colour covers the bevel and every option as the menu scrolls. */
-html[data-display-overlay=true] .retro-select-menu:popover-open{background:var(--lcd-overlay-colour);box-shadow:inset 3px 3px var(--lcd-overlay-colour),inset -3px -3px black,3px 3px black}
-html[data-display-overlay=true] .retro-select-menu:popover-open .active:not([aria-disabled=true]){color:var(--lcd-overlay-colour)}
-html[data-display-overlay=true] .retro-select-menu:popover-open [aria-disabled=true]{color:color-mix(in srgb,var(--lcd-overlay-colour) 46.667%,black)}
+   colour covers the surface and every option as the menu scrolls. */
+html[data-display-overlay=true] .retro-select-menu:popover-open{background:var(--lcd-overlay-colour);color:var(--lcd-ink-colour);border-color:var(--lcd-ink-colour);box-shadow:3px 3px 0 var(--lcd-ink-colour)}
+html[data-display-overlay=true] .retro-select-menu:popover-open .active:not([aria-disabled=true]){color:var(--lcd-overlay-colour);background:var(--lcd-ink-colour)}
+html[data-display-overlay=true] .retro-select-menu:popover-open [aria-disabled=true]{color:color-mix(in srgb,var(--lcd-overlay-colour) 46.667%,var(--lcd-ink-colour))}
 .retro-select-button[aria-expanded=true]::after{border-color:black white white black}
 
 /* Modal windows use the same striped title bar as the editor. */
@@ -285,7 +298,7 @@ button.mapping-action::after{display:block!important;border:var(--bevel) solid!i
 #show-voice,#show-effects,#show-pitch{grid-column:4}
 #mappings{grid-column:5;grid-row:2}#show-modulations{grid-column:5;grid-row:1}
 #compare,#seed{grid-column:6}#transmit,#receive{grid-column:7}
-.commands{grid-template-columns:48px minmax(140px,1.4fr) repeat(5,minmax(0,1fr))}
+.commands{grid-template-columns:48px minmax(140px,1.4fr) repeat(5,minmax(0,1fr)) 60px}
 #modulations-screen{flex:1;min-height:0;padding:12px 8px 0;display:grid;grid-template-rows:minmax(260px,1.4fr) minmax(180px,1fr);gap:8px}
 .mod-top{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;min-height:0}
 .mod-panel{border:1px solid black;display:flex;flex-direction:column;min-height:0;min-width:0;padding:4px;gap:4px}
@@ -321,8 +334,13 @@ button:disabled,input:disabled,.slider-body input[type=range]:disabled,dialog in
 .retro-tooltip{position:fixed;inset:auto;margin:0;max-width:min(340px,calc(100vw - 16px));padding:7px 10px;border:3px double black;border-radius:0;background:white;color:black;box-shadow:3px 3px black;font:18px/1.1 Atari,monospace;white-space:normal;overflow-wrap:anywhere;z-index:2147483647}
 .retro-tooltip[hidden]{display:none}
 /* The tooltip popover is above the blend overlays, so apply the same tint. */
-html[data-display-overlay=true] .retro-tooltip{background:var(--lcd-overlay-colour)}
+html[data-display-overlay=true] .retro-tooltip{background:var(--lcd-overlay-colour);color:var(--lcd-ink-colour);border-color:var(--lcd-ink-colour);box-shadow:3px 3px var(--lcd-ink-colour)}
 
 .mapping-active #modulations-screen .mapping-target :is(input,button){pointer-events:none}
 .mapping-active #modulations-screen .mapping-target .mapping-action{pointer-events:auto}
 .mapping-active .mapping-target:focus-within .mapping-action{display:block!important}
+
+#save-voice{grid-column:8;grid-row:1}#load-voice{grid-column:8;grid-row:2}
+
+.mapping-source-range output{float:right;font-size:16px}
+.mapping-source-range input[type=range]{border:0;padding:0;margin-top:5px}

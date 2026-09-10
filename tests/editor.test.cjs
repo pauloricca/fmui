@@ -106,6 +106,26 @@ test('fine range follows coarse/mode and reverb is shared by all operators',()=>
   e.run('selected=2;render()');assert.equal(e.get('#global-REV').value,5);
 });
 
+test('Fine readout stays on its thumb when CRS changes the live range in either direction',()=>{
+  for(const initialCoarse of [0,8]){
+    const e=editor();
+    e.run(`voice.operators[0].CRS=${initialCoarse};voice.operators[0].FINE=7;render()`);
+    const coarse=e.get('#op-CRS'),fine=e.get('#op-FINE');
+    const control=e.get('#operator-controls').children.find(c=>c.attributes['data-parameter']==='FINE');
+    const output=control.children[1].children[1];
+    let position;
+    output.style.setProperty=(key,value)=>{if(key==='--position')position=value;};
+    for(const value of [0,8,0,8]){
+      coarse.value=String(value);coarse.oninput();
+      assert.equal(e.get('#op-FINE'),fine);
+      assert.equal(Number(fine.max),value===0?7:15);
+      assert.equal(Number(output.textContent),7);
+      const fraction=1-7/Number(fine.max);
+      assert.equal(position,`calc(${18-36*fraction}px + ${fraction*100}%)`);
+    }
+  }
+});
+
 test('full relative envelope fits even the slowest attack and release',()=>{
   const e=editor();
   for(const ar of [1,31])for(const rr of [1,15]){
@@ -547,10 +567,14 @@ test('MIDI mappings route modulation controls with fractional speed ranges',()=>
   assert.equal(e.run('received.value'),20);
   e.run("openMapping({key:'mod:lfo:0:speed',isOp:false,index:0})");
   e.get('#mapping-channel').value='1';e.get('#mapping-cc').value='74';
+  e.get('#mapping-source-min').value='0.5';e.get('#mapping-source-max').value='1';
   e.get('#mapping-min').value='.05';e.get('#mapping-max').value='3.75';
   e.get('#mapping-save').onclick();
   assert.equal(e.run('mappings[0].range[0]'),.05);
   assert.equal(e.run('mappings[0].range[1]'),3.75);
+  assert.equal(e.run('mappings[0].sourceRange[0]'),.5);
+  e.run('mappedChange(mappings[0],0)');assert.equal(e.run('received.value'),.05);
+  e.run('mappedChange(mappings[0],127)');assert.equal(e.run('received.value'),3.75);
 });
 
 test('mapping toggles preserve Randomise availability for the active view',()=>{
@@ -564,4 +588,209 @@ test('mapping toggles preserve Randomise availability for the active view',()=>{
   e.get('#modulations-screen').hidden=true;
   e.run('render()');
   assert.equal(e.get('#seed').disabled,false);
+});
+test('live algorithm refresh updates routing and roles without replacing controls or base voice',()=>{
+  for(const engine of ['ys200','dx7']){
+    const e=editor();if(engine==='dx7')e.run("switchEngine('dx7')");
+    const slider=e.get('#global-ALG'),card=e.get('#operators').children[0];
+    const base=e.run('voice.global.ALG');
+    e.run('const effective=structuredClone(voice);effective.global.ALG=synth.algorithms.length;renderAlgorithm(effective)');
+    assert.match(e.get('#algorithm-diagram').innerHTML,new RegExp(`ALG ${engine==='dx7'?32:8}`));
+    assert.equal(card.children[0].children.find(c=>c.className==='operator-role').textContent,'C');
+    assert.equal(e.get('#global-ALG'),slider);
+    assert.equal(e.run('voice.global.ALG'),base);
+    e.get('#algorithm-diagram').innerHTML='unchanged';
+    e.run('renderAlgorithm(effective)');
+    assert.equal(e.get('#algorithm-diagram').innerHTML,'unchanged');
+    e.run('renderAlgorithm()');
+    assert.match(e.get('#algorithm-diagram').innerHTML,new RegExp(`ALG ${base}`));
+  }
+});
+
+test('voice files round trip both engines, restore effects, and support undo',async()=>{
+  const e=editor('',true);
+  e.run("downloadVoice=(bytes,extension)=>{globalThis.downloaded={bytes,extension};};voice.name='Saved';voice.operators[0].on=0;EffectsUI.setState({preset:2,time:12,balance:34});");
+  e.get('#save-voice').onclick();
+  const saved=e.run('downloaded.bytes');
+  assert.equal(e.run('downloaded.extension'),'.json');
+  e.run("voice.name='Previous';EffectsUI.setState({preset:0,time:0,balance:0});");
+  await e.get('#voice-file').onchange({target:{files:[{text:async()=>saved}]}});
+  assert.equal(e.run('voice.name'),'Saved');
+  assert.equal(e.run('voice.operators[0].on'),0);
+  assert.equal(e.run('EffectsUI.getState().balance'),34);
+  e.run('undoVoice()');
+  assert.equal(e.run('voice.name'),'Previous');
+  assert.equal(e.run('EffectsUI.getState().balance'),0);
+  e.run("switchEngine('dx7');voice.name='Six';");
+  e.get('#save-voice').onclick();
+  const six=e.run('downloaded.bytes');
+  e.run("switchEngine('ys200')");
+  await e.get('#voice-file').onchange({target:{files:[{text:async()=>six}]}});
+  assert.equal(e.run('synth.id'),'dx7');
+  assert.equal(e.run('voice.name'),'Six');
+});
+test('invalid voice uploads leave the buffer and history intact',async()=>{
+  const e=editor('',true),before=e.run('JSON.stringify(snapshot())');
+  for(const text of ['{',JSON.stringify({format:'fm-editor-voice',version:2}),e.run("JSON.stringify({...Synths.snapshot(synth,voice),voice:{...voice,operators:[]}})")]){
+    const target={files:[{text:async()=>text}],value:'voice.json'};
+    await e.get('#voice-file').onchange({target});
+    assert.equal(target.value,'');
+    assert.match(e.get('#status').textContent,/LOAD FAILED/);
+    assert.equal(e.run('JSON.stringify(snapshot())'),before);
+    assert.equal(e.run('history.length'),0);
+  }
+});
+
+test('Randomise covers both voices and effects within legal ranges, with atomic undo and redo',()=>{
+  for(const engine of ['ys200','dx7'])for(const random of [0,.5,.999999]){
+    const e=editor('',true);
+    if(engine==='dx7')e.run("switchEngine('dx7')");
+    e.run(`Math.random=()=>${random}`);
+    const before=e.run('JSON.stringify(voice)'),fxBefore=e.run('JSON.stringify(EffectsUI.snapshot())');
+    e.get('#seed').onclick();
+    const after=e.run('JSON.stringify(voice)'),fxAfter=e.run('JSON.stringify(EffectsUI.snapshot())');
+    assert.notEqual(after,before);
+    assert.equal(e.run('voice.name'),JSON.parse(before).name);
+    e.run(`if(synth.id==='ys200'){YS200Codec.encode(voice);Effects.validate(EffectsUI.getState());}
+    else DX7.validate(voice);`);
+    if(engine==='ys200')assert.notEqual(fxAfter,fxBefore);
+    else assert.equal(fxAfter,fxBefore);
+    assert.equal(e.get('#status').textContent,'VOICE RANDOMISED · ⌘Z TO RESTORE');
+    e.run('undoVoice()');
+    assert.equal(e.run('JSON.stringify(voice)'),before);
+    assert.equal(e.run('JSON.stringify(EffectsUI.snapshot())'),fxBefore);
+    e.run('redoVoice()');
+    assert.equal(e.run('JSON.stringify(voice)'),after);
+    assert.equal(e.run('JSON.stringify(EffectsUI.snapshot())'),fxAfter);
+  }
+});
+
+test('controlled Randomise protects carriers and clears stale controller attenuation across every algorithm',()=>{
+  const e=editor('',true);
+  e.run(`let randomSeed=9231;const rng=()=>{randomSeed=(Math.imul(randomSeed,1664525)+1013904223)>>>0;return randomSeed/4294967296;};`);
+  for(const engine of ['ys200','dx7']){
+    const count=engine==='ys200'?8:32;
+    for(let alg=1;alg<=count;alg++){
+      e.run(`{
+        const profile=Synths.get('${engine}');
+        for(let trial=0;trial<25;trial++){
+          const v=profile.createVoice();v.global.ALG=${alg}%profile.algorithms.length+1;
+          for(const op of v.operators){op.on=0;op.OUT=0;op.FIX=1;}
+          if(profile.id==='ys200'){
+            const b=YS200Codec.encode(v);b.vced[67]=99;b.vced[76]=99;b.aced2[3]=99;
+            v.sysex={vced:b.vced,aced:b.aced,aced2:b.aced2};
+          }
+          let firstDraw=true;
+          const effects=Synths.randomise(profile,v,()=>{
+            if(firstDraw){firstDraw=false;return (${alg}-.5)/profile.algorithms.length;}
+            return rng();
+          });
+          if(v.global.ALG!==${alg}||v.name!==profile.createVoice().name)throw Error('Algorithm was not chosen first or voice name changed');
+          const carriers=profile.carriers[v.global.ALG-1];
+          for(const i of carriers){
+            const op=v.operators[i];
+            if(!op.on||op.FIX||op.OUT<82||op.KVS>2||op.RATE>1)throw Error('Inaudible carrier');
+            if(profile.id==='ys200'){
+              if(op.EBS||op.AME||op.SHIFT||op.LEVEL>8||op.AR<19||op.D1L<7)throw Error('YS200 carrier attenuation');
+            }else if(op.L4!==0||op.L1!==99||op.L3<40||op.R1<55||op.LD>5||op.RD>10)throw Error('DX7 carrier attenuation');
+          }
+          const root=v.operators[carriers[0]];
+          if(root.CRS!==(profile.id==='ys200'?4:1)||root.FINE!==0)throw Error('No fundamental');
+          if(profile.id==='ys200'){
+            const b=YS200Codec.encode(v);Effects.validate(effects);
+            if(b.vced[67]||b.vced[76]||b.aced2[3]||b.vced[75]!==50||b.aced2[2]!==50)throw Error('Controller attenuation remains');
+            if(effects.balance>30)throw Error('Effects dominate dry signal');
+          }else DX7.validate(v);
+          for(const [key,range] of Object.entries(profile.ranges)){
+            const values=profile.scope(key)==='operator'?v.operators.map(op=>op[key]):[v.global[key]];
+            if(values.some(value=>!Number.isInteger(value)||value<range[0]||value>range[1]))throw Error('Invalid '+key);
+          }
+        }
+      }`);
+    }
+  }
+});
+
+test('Randomise mixes operator envelope contours even at random-source extremes',()=>{
+  const e=editor('',true);
+  for(const engine of ['ys200','dx7'])for(const draw of [0,.5,.999999]){
+    e.run(`{
+      const p=Synths.get('${engine}'),v=p.createVoice();
+      Synths.randomise(p,v,()=>${draw});
+      const root=p.carriers[v.global.ALG-1][0],other=(root+1)%v.operators.length;
+      const shape=op=>p.id==='ys200'?(op.D2R>0?'pluck':op.AR<25?'soft':'sustain'):
+        op.L3<=60?'pluck':op.R1<85?'soft':'sustain';
+      if(shape(v.operators[root])===shape(v.operators[other]))throw Error('No contrasting envelope layer');
+      if(p.id==='ys200')YS200Codec.encode(v);else DX7.validate(v);
+    }`);
+  }
+});
+
+test('MIDI source windows clamp and rescale synth destinations',()=>{
+  const e=editor();
+  e.run("const mapping={engine:synth.id,key:'AR',isOp:true,index:0,range:[1,31],sourceRange:[.5,.75]}");
+  for(const [input,expected] of [[0,1],[63,1],[79.375,16],[95.25,31],[127,31]]){
+    e.run(`mappedChange(mapping,${input})`);
+    assert.equal(e.run('voice.operators[0].AR'),expected);
+  }
+});
+
+
+test('mapping dialog saves inverted ranges and validates both endpoints',()=>{
+  const e=editor();
+  e.run("openMapping({key:'AR',isOp:true,index:0})");
+  e.get('#mapping-channel').value='1';e.get('#mapping-cc').value='74';
+  e.get('#mapping-source-min').value='0.25';e.get('#mapping-source-max').value='0.75';
+  for(const [min,max] of [[32,1],[31,-1],[-1,31],[1,32]]){
+    e.get('#mapping-min').value=String(min);e.get('#mapping-max').value=String(max);
+    e.get('#mapping-save').onclick();
+    assert.equal(e.run('mappings.length'),0);
+  }
+  e.get('#mapping-min').value='31';e.get('#mapping-max').value='1';
+  e.get('#mapping-save').onclick();
+  assert.deepEqual(Array.from(e.run('mappings[0].range')),[31,1]);
+  for(const [input,expected] of [[0,31],[31.75,31],[63.5,16],[95.25,1],[127,1]]){
+    e.run(`mappedChange(mappings[0],${input})`);
+    assert.equal(e.run('voice.operators[0].AR'),expected);
+  }
+});
+
+test('MIDI source messages and 14-bit pitch mapping are identical for both engines',()=>{
+  for(const engine of ['ys200','dx7']){
+    const e=editor();
+    e.run(`synth=Synths.get('${engine}');voice=synth.createVoice();const received=[];mappedChange=(m,v,max)=>received.push([m.key,v,max]);`);
+    for(const [source,cc] of [['cc',74],['mod',1],['breath',2],['foot',4],['pitch',null]]){
+      e.run(`mappings=[{engine:synth.id,key:'${source}',source:'midi',midiSource:'${source}',channel:3,device:'pedal',cc:${cc}}];received.length=0`);
+      const bytes=source==='pitch'?[226,1,64]:[178,cc,100];
+      e.run(`handleMappingMessage(${JSON.stringify(bytes)},{id:'other'})`);
+      assert.equal(e.run('received.length'),0);
+      e.run(`handleMappingMessage(${JSON.stringify(bytes)},{id:'pedal'})`);
+      assert.deepEqual(JSON.parse(e.run('JSON.stringify(received[0])')),[source,source==='pitch'?8193:100,source==='pitch'?16383:127]);
+    }
+    e.run("mappings=[{key:'legacy',channel:1,cc:74}];received.length=0;handleMappingMessage([176,74,127]);handleMappingMessage([224,74,127])");
+    assert.equal(e.run('received.length'),1);
+  }
+  const e=editor("const received=[];const Modulations={apply:v=>v,setValue:(k,v)=>received.push(v)}");
+  for(const value of [0,8192,8193,16383])e.run(`mappedChange({engine:synth.id,key:'mod:lfo:0:speed',range:[0,1]},${value},16383)`);
+  assert.deepEqual(Array.from(e.run('received')),[0,8192/16383,8193/16383,1]);
+});
+
+test('MIDI source dropdown hides CC, saves named sources and learns pitch and controllers',()=>{
+  const e=editor();
+  e.run("openMapping({key:'AR',isOp:true,index:0})");
+  for(const [source,cc] of [['mod',1],['breath',2],['foot',4],['pitch',null],['cc',74]]){
+    e.get('#mapping-midi-source').value=source;e.get('#mapping-midi-source').onchange();
+    assert.equal(e.get('#mapping-cc-field').hidden,source!=='cc');
+    e.get('#mapping-channel').value='1';e.get('#mapping-cc').value='74';
+    e.get('#mapping-min').value='1';e.get('#mapping-max').value='31';
+    e.get('#mapping-source-min').value='0';e.get('#mapping-source-max').value='1';
+    e.get('#mapping-save').onclick();
+    assert.equal(e.run('mappings[0].midiSource'),source);
+    assert.equal(e.run('mappings[0].cc'),cc===null?undefined:cc);
+    e.run("openMapping({key:'AR',isOp:true,index:0})");
+    assert.equal(e.get('#mapping-midi-source').value,source);
+    e.run(`learnMapping={};handleMappingMessage(${JSON.stringify(source==='pitch'?[224,0,64]:[176,cc,90])})`);
+    assert.equal(e.get('#mapping-midi-source').value,source);
+    assert.equal(e.run('learnMapping'),null);
+  }
 });

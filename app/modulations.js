@@ -263,7 +263,7 @@ const Modulations = (() => {
       const amount=m.source==='xy'?state.xy[m.sourceId]/100:m.source==='macro'?state.macros[m.sourceId]?.value/100:state.lfos[m.sourceId]?sample(m.sourceId):NaN;
       if(!Number.isFinite(amount))continue;
       const bounds=synth.limits(m.key,op),range=m.range||bounds;
-      const value=Math.max(bounds[0],Math.min(bounds[1],Math.round(range[0]+(range[1]-range[0])*amount)));
+      const value=Math.max(bounds[0],Math.min(bounds[1],Math.round(range[0]+(range[1]-range[0])*mappingAmount(m,amount))));
       if(!synth.valid(m.key,value,op,m.index))continue;
       (m.isOp?op:result.global)[m.key]=value;
       synth.normalize(op);
@@ -288,11 +288,12 @@ const Modulations = (() => {
       const values = mappings.filter(m=>m.engine===synth.id&&targets.has(m.key)&&['xy','macro','lfo'].includes(m.source)).map(m=>{
         const amount=m.source==='xy'?state.xy[m.sourceId]/100:m.source==='macro'?state.macros[m.sourceId]?.value/100:state.lfos[m.sourceId]?sample(m.sourceId):NaN;
         const range=m.range||mappingLimits(m.key,m.index);
-        return [m.key,range[0]+(range[1]-range[0])*amount];
+        return [m.key,range[0]+(range[1]-range[0])*mappingAmount(m,amount)];
       });
       values.forEach(([key,value])=>setValue(key,value));
     }
     const displayed=comparing?initial:apply(voice);
+    if(!$('#voice-screen').hidden&&typeof renderAlgorithm==='function')renderAlgorithm(displayed);
     if(!$('#voice-screen').hidden&&typeof refreshEnvelopeGraphs==='function')refreshEnvelopeGraphs(displayed);
     const output=JSON.stringify(displayed);
     if(output===previousOutput)return;

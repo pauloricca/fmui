@@ -106,7 +106,7 @@ const RetroSelect = (() => {
         const upwards =
           below < Math.min(options.length * 34 + 8, 240) && above > below;
         menu.style.width =
-          Math.min(Math.max(rect.width, 220), innerWidth - 16) + "px";
+          Math.min(rect.width, innerWidth - 16) + "px";
         menu.style.maxHeight =
           Math.max(60, Math.min(320, upwards ? above : below)) + "px";
         menu.style.left =
@@ -114,9 +114,9 @@ const RetroSelect = (() => {
             8,
             Math.min(rect.left, innerWidth - parseFloat(menu.style.width) - 8),
           ) + "px";
-        menu.style.top = upwards ? "auto" : rect.bottom + 2 + "px";
+        menu.style.top = upwards ? "auto" : rect.bottom + "px";
         menu.style.bottom = upwards
-          ? innerHeight - rect.top + 2 + "px"
+          ? innerHeight - rect.top + "px"
           : "auto";
         menu.hidden = false;
         if (menu.showPopover) menu.showPopover();

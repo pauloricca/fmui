@@ -16,11 +16,12 @@ try{const saved=JSON.parse(localStorage.getItem(MAPPINGS_KEY)||'[]');if(Array.is
 function saveMappings(){if(typeof Modulations!=='undefined')Modulations.refreshMappings();try{localStorage.setItem(MAPPINGS_KEY,JSON.stringify(mappings))}catch{}}
 function mappingKey(key,isOp,index=selected){return `${synth.id}:${isOp?'operator:'+index:'global'}:${key}`}
 function mappingFor(key,isOp,index=selected){return mappings.find(m=>m.target===mappingKey(key,isOp,index))}
+const midiMappingSources={cc:{label:'CC'},pitch:{label:'PITCH WHEEL'},mod:{label:'MOD WHEEL',cc:1},breath:{label:'BREATH CONTROLLER',cc:2},foot:{label:'FOOT VOLUME PEDAL',cc:4}};
 function mappingLabel(mapping){
   if(mapping.source==='xy')return 'X-Y '+mapping.sourceId.toUpperCase();
   if(mapping.source==='lfo')return 'LFO '+(Number(mapping.sourceId)+1);
   if(mapping.source==='macro')return typeof Modulations!=='undefined'?Modulations.getState().macros[mapping.sourceId]?.name||'MACRO':'MACRO';
-  return `CC ${mapping.cc}`;
+  return mapping.midiSource&&mapping.midiSource!=='cc'?midiMappingSources[mapping.midiSource]?.label||'MIDI':`CC ${mapping.cc}`;
 }
 function cancelMappingLearn(message='LEARN CANCELLED'){
   if(!learnMapping)return false;learnMapping=null;
@@ -41,22 +42,38 @@ function addMappingAction(el,key,isOp,index=selected,actionHost=el,actionClass='
 }
 function modulationTarget(key){return /^mod:(macro:[0-7]:value|lfo:[01]:(wave|speed|depth))$/.test(key)}
 function mappingLimits(key,index){return modulationTarget(key)?(key.endsWith(':speed')?[.01,20]:key.endsWith(':wave')?[0,6]:[0,100]):synth.limits(key,voice.operators[index]);}
-function mappedChange(mapping,value){
+// Normalize the active portion of a source before scaling to its destination.
+function mappingAmount(mapping, value){
+  const [min,max]=mapping.sourceRange||[0,1];
+  if(max<=min)return value<=min?0:1;
+  return Math.max(0,Math.min(1,(value-min)/(max-min)));
+}
+function mappedChange(mapping,value,maximum=127){
   if(mapping.engine!==synth.id||comparing)return;
-  if(modulationTarget(mapping.key)){const range=mapping.range||mappingLimits(mapping.key,mapping.index);Modulations.setValue(mapping.key,range[0]+(range[1]-range[0])*value/127);return;}
+  const amount=mappingAmount(mapping,value/maximum);
+  if(modulationTarget(mapping.key)){const range=mapping.range||mappingLimits(mapping.key,mapping.index);Modulations.setValue(mapping.key,range[0]+(range[1]-range[0])*amount);return;}
   const [min,max]=mapping.range||synth.limits(mapping.key,voice.operators[mapping.index]||voice.operators[selected]);
-  const scaled=Math.round(min+(max-min)*(value/127));
+  const scaled=Math.round(min+(max-min)*amount);
   const previous=selected; if(mapping.isOp)selected=mapping.index;
   change(mapping.key,scaled,mapping.isOp);selected=previous;if(mapping.isOp)render();
 }
 function handleMappingMessage(event,input){
-  const data=Array.from(event.data||event);if(data.length<3||(data[0]&240)!==176)return;
-  const channel=(data[0]&15)+1,cc=data[1],value=data[2];
+  const data=Array.from(event.data||event),type=data[0]&240;
+  if(data.length<3||![176,224].includes(type)||!data.slice(1,3).every(v=>Number.isInteger(v)&&v>=0&&v<=127))return;
+  const channel=(data[0]&15)+1,cc=type===176?data[1]:null;
+  const value=type===224?data[1]+(data[2]<<7):data[2],maximum=type===224?16383:127;
   if(learnMapping&&(!learnMapping.device||learnMapping.device===input?.id)){
-    $('#mapping-channel').value=String(channel);$('#mapping-cc').value=String(cc);learnMapping=null;
-    const learn=$('#mapping-learn');if(learn){learn.textContent='LEARN';learn.setAttribute('aria-pressed','false')}const hint=$('#mapping-hint');if(hint)hint.textContent=`LEARNED CH ${channel} · CC ${cc}`;return;
+    const source=type===224?'pitch':Object.keys(midiMappingSources).find(k=>midiMappingSources[k].cc===cc)||'cc';
+    $('#mapping-channel').value=String(channel);
+    if(cc!==null)$('#mapping-cc').value=String(cc);
+    $('#mapping-midi-source').value=source;$('#mapping-midi-source').onchange();learnMapping=null;
+    const learn=$('#mapping-learn');if(learn){learn.textContent='LEARN';learn.setAttribute('aria-pressed','false')}const hint=$('#mapping-hint');if(hint)hint.textContent=`LEARNED CH ${channel} · ${mappingLabel({midiSource:source,cc})}`;return;
   }
-  mappings.filter(m=>(!m.source||m.source==='midi')&&(!m.device||m.device===input?.id)&&m.channel===channel&&m.cc===cc).forEach(m=>mappedChange(m,value));
+  mappings.filter(m=>{
+    if((m.source&&m.source!=='midi')||(m.device&&m.device!==input?.id)||m.channel!==channel)return false;
+    const source=m.midiSource||'cc';
+    return source==='pitch'?type===224:type===176&&cc===(source==='cc'?m.cc:midiMappingSources[source]?.cc);
+  }).forEach(m=>mappedChange(m,value,maximum));
 }
 async function prepareMappingMidi(){
   if(mappingAccess)return mappingAccess;
@@ -74,10 +91,30 @@ async function openMapping(target){
   $('#dialog-content').innerHTML=`<div class="mapping-tabs" role="group" aria-label="Mapping source">${['midi','xy','lfo','macro'].map(m=>`<button type="button" id="mapping-tab-${m}" aria-pressed="false">${m==='xy'?'X-Y':m.toUpperCase()}</button>`).join('')}</div>
   <p class="mapping-target-name">${target.isOp?'OP '+(target.index+1)+' / ':''}${target.key}</p>
   <div id="mapping-midi"><div class="mapping-fields"><label class="mapping-device">MIDI DEVICE IN<select id="mapping-device"><option value="">ANY MIDI INPUT</option></select></label></div>
-  <div class="mapping-midi-row mapping-fields"><label>CHANNEL<input id="mapping-channel" type="number" min="1" max="16" value="${existing?.channel||1}"></label><label>CC<input id="mapping-cc" type="number" min="0" max="127" value="${existing?.cc??1}"></label><button type="button" class="mapping-learn" id="mapping-learn" aria-pressed="false">LEARN</button></div></div>
+  <div class="mapping-fields"><label class="mapping-device">SOURCE<select id="mapping-midi-source">${Object.entries(midiMappingSources).map(([value,{label}])=>`<option value="${value}">${label}</option>`).join('')}</select></label></div>
+  <div class="mapping-midi-row mapping-fields"><label>CHANNEL<input id="mapping-channel" type="number" min="1" max="16" value="${existing?.channel||1}"></label><label id="mapping-cc-field">CC<input id="mapping-cc" type="number" min="0" max="127" value="${existing?.cc??1}"></label><button type="button" class="mapping-learn" id="mapping-learn" aria-pressed="false">LEARN</button></div></div>
   <div id="mapping-virtual" class="mapping-fields"><label class="mapping-device">SOURCE<select id="mapping-source"></select></label></div>
   <div class="mapping-fields"><label>MIN VALUE<input id="mapping-min" type="number" step="${fractional?.01:1}" value="${existing?.range?.[0]??limits[0]}"></label><label>MAX VALUE<input id="mapping-max" type="number" step="${fractional?.01:1}" value="${existing?.range?.[1]??limits[1]}"></label></div>
+  <div class="mapping-fields mapping-source-range">${['min','max'].map((name,i)=>`<label for="mapping-source-${name}">SOURCE ${name.toUpperCase()} <output id="mapping-source-${name}-value" for="mapping-source-${name}">${(existing?.sourceRange?.[i]??i).toFixed(2)}</output><input id="mapping-source-${name}" type="range" min="0" max="1" step="0.01" value="${existing?.sourceRange?.[i]??i}"></label>`).join('')}</div>
   <p id="mapping-hint" class="mapping-hint"></p><div class="dialog-actions">${existing?'<button type="button" id="mapping-remove">REMOVE</button>':''}<button type="button" id="mapping-cancel">CANCEL</button><button type="button" id="mapping-save">SAVE</button></div>`;
+  for(const name of ['min','max']){
+    const input=$('#mapping-source-'+name);
+    input.oninput=()=>{
+      const other=$('#mapping-source-'+(name==='min'?'max':'min'));
+      if(name==='min'&&Number(input.value)>=Number(other.value))input.value=Math.max(0,Number(other.value)-.01);
+      if(name==='max'&&Number(input.value)<=Number(other.value))input.value=Math.min(1,Number(other.value)+.01);
+      $('#mapping-source-'+name+'-value').textContent=Number(input.value).toFixed(2);
+    };
+  }
+  const midiSource=$('#mapping-midi-source');
+  midiSource.value=existing?.midiSource||'cc';
+  midiSource.onchange=()=>{
+    cancelMappingLearn();
+    $('#mapping-cc-field').hidden=midiSource.value!=='cc';
+    $('#mapping-learn').hidden=midiSource.value!=='cc';
+    if(typeof RetroSelect!=='undefined')RetroSelect.enhance($('#dialog-content'));
+  };
+  midiSource.onchange();
   const selections={xy:'x',lfo:'0',macro:'0'};
   if(existing?.sourceId!==undefined)selections[mode]=String(existing.sourceId);
   function selectMode(next){
@@ -88,7 +125,7 @@ async function openMapping(target){
     const choices=mode==='xy'?[['x','X AXIS'],['y','Y AXIS']]:mode==='lfo'?[['0','LFO 1'],['1','LFO 2']]:mode==='macro'?(typeof Modulations!=='undefined'?Modulations.getState().macros:[]).map((m,i)=>[String(i),m.name]):[];
     $('#mapping-source').replaceChildren(...choices.map(([value,label])=>{const o=document.createElement('option');o.value=value;o.textContent=label;return o;}));
     $('#mapping-source').value=selections[mode]||'';
-    $('#mapping-hint').textContent=mode==='midi'?'Choose a CC or use LEARN.':'Choose a source and its destination range.';
+    $('#mapping-hint').textContent=mode==='midi'?'Choose a source or use LEARN.':'Choose a source and its destination range.';
     if(typeof RetroSelect!=='undefined')RetroSelect.enhance($('#dialog-content'));
   }
   for(const m of ['midi','xy','lfo','macro'])$('#mapping-tab-'+m).onclick=()=>selectMode(m);
@@ -98,9 +135,11 @@ async function openMapping(target){
   $('#mapping-cancel').onclick=()=>{$('#dialog').close();learnMapping=null};
   $('#mapping-save').onclick=()=>{
     const channel=Number($('#mapping-channel').value),cc=Number($('#mapping-cc').value),min=Number($('#mapping-min').value),max=Number($('#mapping-max').value);
-    if((mode==='midi'&&(!Number.isInteger(channel)||channel<1||channel>16||!Number.isInteger(cc)||cc<0||cc>127))||!(fractional?Number.isFinite(min):Number.isInteger(min))||!(fractional?Number.isFinite(max):Number.isInteger(max))||min>max||min<limits[0]||max>limits[1]){$('#mapping-hint').textContent='CHECK SOURCE AND PARAMETER VALUE RANGE.';return;}
-    const mapping={target:mappingKey(target.key,target.isOp,target.index),engine:synth.id,key:target.key,isOp:target.isOp,index:target.index,source:mode,range:[min,max]};
-    if(mode==='midi')Object.assign(mapping,{device:$('#mapping-device').value,channel,cc});
+    if((mode==='midi'&&(!Number.isInteger(channel)||channel<1||channel>16||(midiSource.value==='cc'&&(!Number.isInteger(cc)||cc<0||cc>127))))||!(fractional?Number.isFinite(min):Number.isInteger(min))||!(fractional?Number.isFinite(max):Number.isInteger(max))||min<limits[0]||min>limits[1]||max<limits[0]||max>limits[1]){$('#mapping-hint').textContent='CHECK SOURCE AND PARAMETER VALUE RANGE.';return;}
+    const sourceMin=Number($('#mapping-source-min').value),sourceMax=Number($('#mapping-source-max').value);
+    if(!Number.isFinite(sourceMin)||!Number.isFinite(sourceMax)||sourceMin<0||sourceMax>1||sourceMin>=sourceMax){$('#mapping-hint').textContent='SOURCE MIN MUST BE LOWER THAN SOURCE MAX.';return;}
+    const mapping={target:mappingKey(target.key,target.isOp,target.index),engine:synth.id,key:target.key,isOp:target.isOp,index:target.index,source:mode,range:[min,max],sourceRange:[sourceMin,sourceMax]};
+    if(mode==='midi')Object.assign(mapping,{device:$('#mapping-device').value,channel,midiSource:midiSource.value,...(midiSource.value==='pitch'?{}:{cc:midiSource.value==='cc'?cc:midiMappingSources[midiSource.value].cc})});
     else mapping.sourceId=mode==='xy'?$('#mapping-source').value:Number($('#mapping-source').value);
     mappings=mappings.filter(m=>m.target!==mapping.target);mappings.push(mapping);saveMappings();learnMapping=null;$('#dialog').close();render();status(`${target.key} MAPPED TO ${mappingLabel(mapping)}`);
   };
@@ -126,12 +165,12 @@ function lowerSpecs(){return pitchEditing?synth.pitchSpecs:opSpecs;}
 // Sine-derived icon geometry, not an audio emulation or measured wavetable.
 function operatorSample(wave,phase){return synth.operatorSample(wave,phase)}
 function operatorWave(wave) {
-  const points = Array.from({length:57}, (_, x) => `${x+3},${Math.round(16-12*operatorSample(wave,x/56))}`).join(' ');
-  return `<svg class="wave-preview" viewBox="0 0 62 32" role="img" aria-label="Wave ${wave}: ${synth.waveNames[wave]}"><path class="wave-axis" d="M3 16H59"/><polyline points="${points}"/></svg>`;
+  const points = Array.from({length:57}, (_, x) => [x+3,16-12*operatorSample(wave,x/56)]);
+  return `<svg class="wave-preview" viewBox="0 0 62 32" role="img" aria-label="Wave ${wave}: ${synth.waveNames[wave]}"><path class="wave-axis" d="M3 16H59"/><path class="wave-pixels" d="${Waveforms.pixelPath(points)}"/></svg>`;
 }
 function lfoWave(wave){return synth.lfoWave(wave)}
 function shown(){return comparing?initial:typeof Modulations!=='undefined'?Modulations.apply(voice):voice}
-function status(text){if(typeof MidiUI!=='undefined'){MidiUI.changed();if(MidiUI.config().live)text=text.replace(/LOCAL EDIT/g,'LIVE MIDI');}$('#status').textContent=text;$('#edit-state').textContent=comparing?'COMPARE / ORIGINAL':history.length?'EDIT BUFFER *':'EDIT BUFFER'}
+function status(text){if(typeof MidiUI!=='undefined'){MidiUI.changed();if(MidiUI.config().live)text=text.replace(/LOCAL EDIT/g,'LIVE MIDI');}$('#status').textContent=text;}
 function snapshot(includeEffects=false){return {voice:structuredClone(voice),initial:structuredClone(initial),effects:includeEffects&&synth.effects&&typeof EffectsUI!=='undefined'?EffectsUI.snapshot():null};}
 function remember(includeEffects=false){history.push(snapshot(includeEffects));if(history.length>100)history.shift();redoHistory=[];}
 function change(key,value,isOp){isOp=synth.scope(key)==='operator';if(comparing||synth.controlReason(key,voice.operators[selected],selected)||!synth.valid(key,value,voice.operators[selected],selected))return;const focused=document.activeElement?.id;remember();(isOp?voice.operators[selected]:voice.global)[key]=value;synth.normalize(voice.operators[selected]);render();if(focused)document.getElementById(focused)?.focus();status(`${isOp?'OP '+(selected+1)+' / ':''}${key} = ${value}  ·  LOCAL EDIT`)}
@@ -148,7 +187,7 @@ el.refreshAvailability();
 if(synth.unsupported[key]){body.className+=' unavailable';body.textContent='N/A';body.title=disabledReason;return el;}
 if(Array.isArray(min)){body.classList.add('options');[...min.keys()].reverse().forEach(i=>{const b=document.createElement('button');if(key==='LFW')b.innerHTML=lfoWave(i);else b.textContent=min[i];b.title=title+': '+min[i];b.setAttribute('aria-label',title+': '+min[i]);b.setAttribute('aria-pressed',String(value===i));b.disabled=comparing||!!disabledReason;editable.push(b);b.onclick=()=>change(key,i,isOp);body.append(b)})}
 else{const input=document.createElement('input');input.type='range';input.min=min;input.max=max;input.value=value;input.id=(isOp?'op-':'global-')+key;input.setAttribute('aria-label',title);input.disabled=comparing||!!disabledReason;editable.push(input);input.title=disabledReason||title;label.htmlFor=input.id;const out=document.createElement('output');out.className='slider-value';out.htmlFor=input.id;
-const update=()=>{out.textContent=synth.formatValue(key,Number(input.value));out.style.setProperty('--position',`calc(${18-36*(1-(Number(input.value)-min)/(max-min))}px + ${(1-(Number(input.value)-min)/(max-min))*100}%)`)};input.refreshValue=update;update();let editing=false;
+const update=()=>{const min=Number(input.min),max=Number(input.max),position=1-(Number(input.value)-min)/(max-min);out.textContent=synth.formatValue(key,Number(input.value));out.style.setProperty('--position',`calc(${18-36*position}px + ${position*100}%)`)};input.refreshValue=update;update();let editing=false;
 input.oninput=()=>{
   if(comparing||synth.controlReason(key,voice.operators[selected],selected)||!synth.valid(key,Number(input.value),voice.operators[selected],selected))return;
   if(!editing){remember();editing=true;}
@@ -168,10 +207,20 @@ const guides=comparing?'':(eg.guides||[]).filter(g=>!synth.controlReason(g.key,o
   const path=g.axis==='x'?`M${x} 8V103`:`M3 ${y}H247`;
   return `<g class="env-guide ${envelopeDrag?.index===i&&envelopeDrag.key===g.key?'active':''}" data-key="${g.key}" data-axis="${g.axis}" style="cursor:${g.axis==='x'?'ew':'ns'}-resize"><path class="env-hit" d="${path}"/><path class="env-line" d="${path}"/><rect class="env-anchor" x="${x-3}" y="${y-3}" width="6" height="6"/><text class="env-label" x="${Math.min(222,x+5)}" y="${g.key==='D1L'?Math.min(100,y+13):Math.max(15,y-5)}">${g.key}</text></g>`;
 }).join('');
-return `<svg data-operator="${i}" class="envelope ${envelopeDrag?.index===i?'dragging':''}" viewBox="0 0 250 108" preserveAspectRatio="none" role="img" aria-label="Operator ${i+1} envelope, relative time"><defs><pattern id="dither${i}" width="2" height="2" patternUnits="userSpaceOnUse"><path d="M0 0h1v1H0z${op.on?' M1 1h1v1H1z':''}" fill="black"/></pattern></defs><path d="${line} L247 103 L3 103 Z" fill="url(#dither${i})" stroke="black" stroke-width="1"/>${eg.keyOffX===undefined?'':`<path d="M${eg.keyOffX} 8V103" fill="none" stroke="black" stroke-dasharray="2 3"/>`}<g class="env-guides">${guides}</g></svg>`}
+const fillPoints=[...eg.points,[247,103],[3,103]].map(([x,y])=>`${x/250*100}% ${y/108*100}%`).join(',');
+return `<div class="envelope-plot"><div class="envelope-fill ${op.on?'':'envelope-fill-off'}" style="clip-path:polygon(${fillPoints})" aria-hidden="true"></div><svg data-operator="${i}" class="envelope ${envelopeDrag?.index===i?'dragging':''}" viewBox="0 0 250 108" preserveAspectRatio="none" role="img" aria-label="Operator ${i+1} envelope, relative time"><path d="${line} L247 103 L3 103 Z" fill="none" stroke="black" stroke-width="1"/>${eg.keyOffX===undefined?'':`<path d="M${eg.keyOffX} 8V103" fill="none" stroke="black" stroke-dasharray="2 3"/>`}<g class="env-guides">${guides}</g></svg></div>`}
 function render(){const current=shown();$('#voice-name').value=current.name;$('#voice-name').disabled=comparing;$('#global-controls').replaceChildren(...globalSpecs.map(s=>control(s,synth.scope(s[0])==='operator')));$('#operator-controls').replaceChildren(...lowerSpecs().map(s=>control(s,true)));renderOperators();renderPitch();$('#compare').setAttribute('aria-pressed',String(comparing));$('#seed').disabled=comparing||$('#modulations-screen')?.hidden===false||$('#effects-screen')?.hidden===false}
-function renderAlgorithm(){
-  const current=shown(),number=current.global.ALG,layout=synth.algorithms[number-1];
+function renderAlgorithm(current=shown()){
+  const number=current.global.ALG,layout=synth.algorithms[number-1];
+  const host=$('#algorithm-diagram');
+  const signature=`${synth.id}:${number}:${current.global.FBL}:${selected}`;
+  if(host.algorithmSignature===signature)return;
+  host.algorithmSignature=signature;
+  current.operators.forEach((_,i)=>{
+    const top=$('#operators').children[i]?.children[0];
+    const role=top&&Array.from(top.children).find(child=>child.className==='operator-role');
+    if(role){role.textContent=synth.carriers[number-1].includes(i)?'C':'M';role.setAttribute('aria-label',`Operator ${i+1} ${role.textContent==='C'?'carrier':'modulator'}`);}
+  });
   const wires=layout.edges.map(([from,to])=>{
     const [x,y]=layout.positions[from],[tx,ty]=layout.positions[to];
     const mid=(y+10+ty-10)/2;
@@ -253,10 +302,16 @@ envelopeHost.onpointercancel=finishEnvelopeDrag;
 envelopeHost.onlostpointercapture=finishEnvelopeDrag;
 $('#voice-name').onchange=e=>{remember();voice.name=e.target.value.replace(/[^\x20-\x7e]/g,'?').slice(0,synth.nameLength);e.target.value=voice.name;status('VOICE RENAMED · LOCAL EDIT')};
 function restoreVoice(saved){({voice,initial}=saved);if(saved.effects&&typeof EffectsUI!=='undefined')EffectsUI.restore(saved.effects);render();}
-function undoVoice(){if(comparing||!history.length)return false;redoHistory.push(snapshot());restoreVoice(history.pop());status('LAST EDIT UNDONE');return true;}
-function redoVoice(){if(comparing||!redoHistory.length)return false;history.push(snapshot());restoreVoice(redoHistory.pop());status('LAST EDIT REDONE');return true;}
+function undoVoice(){if(comparing||!history.length)return false;redoHistory.push(snapshot(!!history.at(-1).effects));restoreVoice(history.pop());status('LAST EDIT UNDONE');return true;}
+function redoVoice(){if(comparing||!redoHistory.length)return false;history.push(snapshot(!!redoHistory.at(-1).effects));restoreVoice(redoHistory.pop());status('LAST EDIT REDONE');return true;}
 $('#compare').onclick=()=>{comparing=!comparing;render();status(comparing?'ORIGINAL VOICE · PRESS COMPARE TO RETURN':'EDITED VOICE RESTORED')};
-$('#seed').onclick=()=>{remember();synth.seed(voice);render();status('ENVELOPES RANDOMISED · ⌘Z TO RESTORE')};
+$('#seed').onclick=()=>{
+  if($('#seed').disabled)return;
+  remember(true);
+  const effects=Synths.randomise(synth,voice);
+  if(effects&&typeof EffectsUI!=='undefined')EffectsUI.setState(effects,false);
+  render();status('VOICE RANDOMISED · ⌘Z TO RESTORE');
+};
 $('#zoom').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{status('FULLSCREEN IS NOT AVAILABLE IN THIS BROWSER')}};
 
 function openDialog(type){const [title,html]=synth.dialogs[type];$('#dialog-title').textContent=title;$('#dialog-content').innerHTML=html;$('#dialog').showModal();if(type==='file'&&synth.midi.voiceCodec)setupVoiceFiles();if(type==='file')$('#save-json').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(Synths.snapshot(synth,voice),null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=(voice.name.replace(/[^a-z0-9_-]/gi,'_')||'voice')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);status('VOICE SNAPSHOT SAVED')}}
@@ -306,3 +361,32 @@ modal.onpointerup=e=>{if(backdropPressed&&outsideModal(e))modal.close();backdrop
 modal.onpointercancel=()=>{backdropPressed=false;};
 $('#dialog-close').onclick=()=>modal.close();
 modal.onclose=()=>{learnMapping=null};
+
+// Portable voice snapshots keep all stored parameters, including operator mutes.
+$('#save-voice').onclick=()=>{
+  const data=Synths.snapshot(synth,comparing?initial:voice);
+  if(synth.effects)data.effects=EffectsUI.getState();
+  downloadVoice(JSON.stringify(data,null,2),'.json');
+  status('VOICE FILE SAVED');
+};
+$('#load-voice').onclick=()=>$('#voice-file').click();
+$('#voice-file').onchange=async e=>{
+  const file=e.target.files[0];
+  e.target.value='';
+  if(!file)return;
+  try{
+    if(file.size>1024*1024)throw Error('Voice file is too large');
+    const data=JSON.parse(await file.text());
+    if(data.format!=='fm-editor-voice'||data.version!==1)throw Error('Unsupported voice file format');
+    const profile=Synths.get(data.synthId);
+    if(profile.id==='dx7')DX7.validate(data.voice);else YS200Codec.validate(data.voice);
+    if(data.effects!==undefined){if(!profile.effects)throw Error('Effects are unsupported for this voice');Effects.validate(data.effects);}
+    const loaded=structuredClone(data.voice);
+    switchEngine(profile.id);
+    remember(true);
+    voice=loaded;initial=structuredClone(loaded);comparing=false;selected=0;
+    if(data.effects!==undefined)EffectsUI.setState(data.effects);
+    render();
+    status('VOICE FILE LOADED · ⌘Z TO RESTORE PREVIOUS EDIT');
+  }catch(error){$('#status').textContent='LOAD FAILED · '+error.message;}
+};

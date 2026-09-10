@@ -1,0 +1,27 @@
+name: yamaha-instruments
+services:
+  dx7:
+    build: .
+    image: yamaha-instruments-dx7:local
+    command: ["--model", "dx7", "--listen", "0.0.0.0:7000", "--channel", "${DX7_CHANNEL:-1}", "--state", "/data/state.bin"]
+    ports: ["127.0.0.1:${DX7_PORT:-7007}:7000"]
+    volumes: ["dx7-memory:/data"]
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+  ys200:
+    image: yamaha-instruments-ys200:local
+    build: .
+    command: ["--model", "ys200", "--listen", "0.0.0.0:7000", "--channel", "${YS200_CHANNEL:-1}", "--state", "/data/state.bin"]
+    ports: ["127.0.0.1:${YS200_PORT:-7200}:7000"]
+    volumes: ["ys200-memory:/data"]
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+volumes:
+  dx7-memory:
+  ys200-memory:

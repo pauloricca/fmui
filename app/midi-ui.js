@@ -21,6 +21,7 @@ const MidiUI = (() => {
   const config = () => settings[synth.id],
     codec = () => synth.midi.voiceCodec;
   const notify = (text) => {
+    connectionStatus();
     const el = $("#midi-status");
     if (el) el.textContent = text;
     $("#status").textContent = text;
@@ -31,6 +32,7 @@ const MidiUI = (() => {
       notify(text);
     },
     onPorts: () => {
+      connectionStatus();
       if (
         transport.input?.state === "disconnected" ||
         transport.output?.state === "disconnected"
@@ -43,6 +45,13 @@ const MidiUI = (() => {
       refreshPorts();
     },
   });
+  function connectionStatus() {
+    const connected = (port) => port && port.state !== "disconnected" && port.connection === "open";
+    const input = connected(transport.input), output = connected(transport.output);
+    $("#midi-connection").setAttribute("data-connected", String(Boolean(input || output)));
+    $("#midi-connection").textContent = input && output ? "MIDI CONNECTED"
+      : output ? "MIDI OUT CONNECTED" : input ? "MIDI IN CONNECTED" : "MIDI DISCONNECTED";
+  }
   const safe =
     (fn) =>
     async (...args) => {

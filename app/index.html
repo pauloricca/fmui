@@ -11,13 +11,15 @@
 <body>
 <main>
 <section class="window" aria-label="YSEditor voice editor">
-<header class="window-title"><h1>YAMAHA 4-OP EDITOR</h1><button id="display-overlay" aria-pressed="false" title="Toggle LCD display colour">LCD</button><button id="zoom" aria-label="Toggle fullscreen">↗</button></header>
+<header class="window-title"><h1>YAMAHA 4-OP EDITOR</h1><button id="display-overlay" aria-pressed="false" title="Toggle LCD display colour">LCD</button><button id="zoom" aria-label="Toggle fullscreen"><svg class="fullscreen-icon" viewBox="0 0 7 7" width="14" height="14" aria-hidden="true" focusable="false" shape-rendering="crispEdges"><path fill="currentColor" d="M3 0h4v4H6V1H3z M5 1h1v1H5z M4 2h1v1H4z M3 3h1v1H3z M2 4h1v1H2z M1 5h1v1H1z M0 6h1v1H0z"/></svg></button></header>
 <div class="commands">
 <div class="engine-switch" role="group" aria-label="FM engine"><button id="engine-6op" aria-pressed="false" title="Yamaha DX7">6-OP</button><button id="engine-4op" aria-pressed="true" title="Yamaha YS200">4-OP</button></div>
 <label class="voice-name">VOICENAME:<input id="voice-name" maxlength="10" value="FloatChime" aria-label="Voice name"></label>
 <button id="midi-settings">MIDI</button><button id="device-controls">CONFIG</button><button id="receive">RECEIVE VOICE</button><button id="transmit">SEND VOICE</button>
 <button id="show-voice" aria-pressed="true" aria-controls="voice-screen">VOICE</button><button id="show-effects" aria-pressed="false" aria-controls="effects-screen">EFFECT</button>
-<button id="show-pitch" hidden aria-pressed="false">PITCH</button><button id="seed">RANDOMISE</button><button id="compare" aria-pressed="false">COMPARE</button><button id="show-modulations" aria-pressed="false" aria-controls="modulations-screen">MODULATIONS</button><button id="mappings" aria-pressed="false" title="Toggle controller mappings">MAPPINGS</button>
+<button id="show-pitch" hidden aria-pressed="false">PITCH</button><button id="seed" title="Generate a playable voice for a randomly chosen algorithm">RANDOMISE</button><button id="compare" aria-pressed="false">COMPARE</button><button id="show-modulations" aria-pressed="false" aria-controls="modulations-screen">MODULATIONS</button><button id="mappings" aria-pressed="false" title="Toggle controller mappings">MAPPINGS</button>
+<button id="save-voice" title="Download voice as JSON">SAVE</button><button id="load-voice" title="Upload voice from JSON">LOAD</button>
+<input id="voice-file" type="file" accept=".json,application/json" hidden aria-label="Load voice file">
 </div>
 <div id="voice-screen" class="editor-screen">
 <div class="group-captions"><span></span><span>LOW FREQUENCY OSCILLATOR</span><span>SENSITIVITY</span><span></span></div>
@@ -34,7 +36,7 @@
 </div>
 </section>
 <section id="modulations-screen" hidden aria-label="Virtual modulations"><div class="mod-top" id="mod-top"></div><div class="mod-macros sliders" id="mod-macros"></div></section>
-<footer class="editor-status"><span id="status" role="status">READY. SELECT A SLIDER OR OPERATOR.</span><span id="edit-state">EDIT BUFFER</span></footer>
+<footer class="editor-status"><span id="status" role="status">READY. SELECT A SLIDER OR OPERATOR.</span><span id="midi-connection" role="status">MIDI DISCONNECTED</span></footer>
 </section>
 </main>
 <dialog id="dialog" aria-labelledby="dialog-title"><header class="window-title dialog-titlebar"><button type="button" id="dialog-close" aria-label="Close dialog">×</button><h2 id="dialog-title"></h2></header><div id="dialog-content"></div></dialog>

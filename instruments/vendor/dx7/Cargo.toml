@@ -1,0 +1,9 @@
+[package]
+name = "dx7"
+version = "0.0.4"
+edition = "2024"
+license = "MIT"
+
+[features]
+fast_op_level_modulation = []
+

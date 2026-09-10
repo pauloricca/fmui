@@ -1,6 +1,6 @@
 # Browser MIDI and SysEx
 
-Both modes run entirely in browser JavaScript. The HTTP server only serves files. There is no Rust process, server MIDI access, software synthesis, or automatic conversion between four- and six-operator voices.
+Both editor modes run entirely in browser JavaScript. The HTTP server only serves files. Optional external Rust instrument services and a native MIDI/audio bridge are available in [instruments/README.md](instruments/README.md), using a separate Compose project. The editor itself performs no synthesis or automatic conversion between four- and six-operator voices.
 
 ## Connect and edit
 

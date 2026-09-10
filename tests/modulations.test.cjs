@@ -19,6 +19,7 @@ function setup(storage={getItem:()=>null,setItem(){}}){
   for(const name of ['ys200','effects','waveforms','ys200-profile','dx7','dx7-profile','synths'])vm.runInContext(fs.readFileSync(`app/${name}.js`,'utf8'),context);
   vm.runInContext("let synth=Synths.get('ys200'),voice=synth.createVoice(),initial=structuredClone(voice);",context);
   vm.runInContext(fs.readFileSync('app/storage.js','utf8'),context);
+  vm.runInContext(fs.readFileSync('app/editor.js','utf8').match(/function mappingAmount\(mapping, value\)\{[\s\S]*?\n\}/)[0],context);
   vm.runInContext(fs.readFileSync('app/modulations.js','utf8'),context);
   return {run:s=>vm.runInContext(s,context),nodes,tick:now=>{context.performance.now=()=>now;ticks.forEach(fn=>fn());}};
 }
@@ -167,4 +168,44 @@ test('virtual sources drive modulation destinations and then synth destinations'
   assert.equal(e.run('Modulations.apply(voice).global.FBL'),3);
   e.run("comparing=true;Modulations.setValue('mod:macro:0:value',0)");e.tick(100);
   assert.equal(e.run('Modulations.getState().macros[0].value'),0);
+});
+test('modulation ticks refresh algorithm while mapping or focused, and restore compare voice',()=>{
+  const e=setup();
+  e.run("let diagram;function renderAlgorithm(value){diagram=value;}document.activeElement={tagName:'INPUT'};mappingMode=true;mappings=[{engine:'ys200',source:'macro',sourceId:0,key:'ALG',index:0,isOp:false,range:[1,8]}]");
+  e.run("Modulations.setValue('mod:macro:0:value',100)");e.tick(50);
+  assert.equal(e.run('diagram.global.ALG'),8);
+  assert.equal(e.run('voice.global.ALG'),5);
+  e.run('comparing=true');e.tick(100);
+  assert.equal(e.run('diagram.global.ALG'),5);
+  e.run('comparing=false;mappings=[]');e.tick(150);
+  assert.equal(e.run('diagram.global.ALG'),5);
+});
+
+test('source windows clamp and rescale macros, XY, LFOs and modulation destinations',()=>{
+  const e=setup();
+  e.run("mappings=[{engine:'ys200',source:'macro',sourceId:0,key:'FBL',index:0,isOp:false,range:[1,7],sourceRange:[.5,.75]}]");
+  const input=e.nodes.get('#mod-macros').children[0].querySelector();
+  for(const [value,expected] of [[0,1],[25,1],[50,1],[62.5,4],[75,7],[100,7]]){
+    input.value=value;input.oninput();
+    assert.equal(e.run('Modulations.apply(voice).global.FBL'),expected);
+  }
+  e.run("mappings[0].source='xy';mappings[0].sourceId='x'");
+  assert.equal(e.run('Modulations.apply(voice).global.FBL'),1);
+  e.run("mappings[0].source='lfo';mappings[0].sourceId=0");
+  assert.equal(e.run('Modulations.apply(voice).global.FBL'),1);
+  e.run("mappings=[{engine:'ys200',source:'xy',sourceId:'x',key:'mod:macro:0:value',range:[0,100],sourceRange:[.25,.75]}];$('#voice-screen').hidden=true");
+  e.tick(50);assert.equal(e.run('Modulations.getState().macros[0].value'),50);
+  e.run('mappings[0].sourceRange=[.5,1]');
+  e.tick(100);assert.equal(e.run('Modulations.getState().macros[0].value'),0);
+});
+
+
+test('inverted macro destination ranges decrease as the source increases',()=>{
+  const e=setup();
+  e.run("mappings=[{engine:'ys200',source:'macro',sourceId:0,key:'FBL',index:0,isOp:false,range:[7,1]}]");
+  const input=e.nodes.get('#mod-macros').children[0].querySelector();
+  for(const [value,expected] of [[0,7],[50,4],[100,1]]){
+    input.value=value;input.oninput();
+    assert.equal(e.run('Modulations.apply(voice).global.FBL'),expected);
+  }
 });

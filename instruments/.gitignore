@@ -1,0 +1,6 @@
+/target/
+/recordings/
+/bridge/.venv/
+__pycache__/
+*.pyc
+

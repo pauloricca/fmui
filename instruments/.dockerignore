@@ -1,0 +1,5 @@
+target
+recordings
+bridge/.venv
+**/__pycache__
+
