@@ -8,6 +8,8 @@
   const shapes = {
     default: [arrow, 2, 1],
     pointer: ['M8 2H12V10H14V8H17V10H20V12H23V20H21V24H10V22H8V20H6V18H4V14H8Z', 10, 2],
+    grab: ['M5 13H7V5H11V11H12V3H16V11H17V5H21V13H22V9H26V21H24V25H21V28H11V25H8V22H5V19H3V13ZM10 15H12V20H10ZM15 14H17V20H15ZM20 15H22V20H20Z', 15, 16],
+    grabbing: ['M7 11H11V8H15V7H19V8H23V10H26V21H24V25H21V28H11V25H8V22H5V18H3V14H7ZM10 12H12V17H10ZM15 11H17V16H15ZM20 12H22V17H20Z', 15, 16],
     text: ['M5 3H11V5H13V3H19V5H15V23H19V25H13V23H11V25H5V23H9V5H5Z', 12, 14],
     'ns-resize': [vertical, 11, 11],
     'ew-resize': [vertical, 11, 11, 'rotate(90 11 11)'],
@@ -110,4 +112,53 @@
   document.addEventListener('close', hide, true);
   window.addEventListener('resize', hide);
   window.addEventListener('blur', hide);
+})();
+
+// Move native modal dialogs without changing their focus or backdrop behavior.
+(() => {
+  const dialog = document.querySelector('#dialog');
+  const titlebar = dialog.querySelector('.dialog-titlebar');
+  let drag = null;
+  function position(left, top) {
+    const rect = dialog.getBoundingClientRect();
+    dialog.style.left = `${Math.max(0, Math.min(left, innerWidth - rect.width))}px`;
+    dialog.style.top = `${Math.max(0, Math.min(top, innerHeight - rect.height))}px`;
+  }
+  function stop() {
+    if (!drag) return;
+    const id = drag.id;
+    drag = null;
+    titlebar.classList.remove('dragging');
+    if (titlebar.hasPointerCapture(id)) titlebar.releasePointerCapture(id);
+  }
+  titlebar.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || !e.isPrimary || e.target.closest('button')) return;
+    const rect = dialog.getBoundingClientRect();
+    drag = { id: e.pointerId, x: e.clientX - rect.left, y: e.clientY - rect.top };
+    dialog.classList.add('dialog-positioned');
+    position(rect.left, rect.top);
+    titlebar.classList.add('dragging');
+    titlebar.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  titlebar.addEventListener('pointermove', e => {
+    if (drag?.id === e.pointerId) position(e.clientX - drag.x, e.clientY - drag.y);
+  });
+  for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+    titlebar.addEventListener(event, e => { if (drag?.id === e.pointerId) stop(); });
+  }
+  dialog.addEventListener('close', () => {
+    stop();
+    dialog.classList.remove('dialog-positioned');
+    dialog.style.removeProperty('left');
+    dialog.style.removeProperty('top');
+  });
+  function constrain() {
+    if (!dialog.open || !dialog.classList.contains('dialog-positioned')) return;
+    const rect = dialog.getBoundingClientRect();
+    position(rect.left, rect.top);
+  }
+  window.addEventListener('resize', constrain);
+  window.addEventListener('blur', stop);
+  new ResizeObserver(constrain).observe(dialog);
 })();

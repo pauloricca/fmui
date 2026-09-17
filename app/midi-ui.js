@@ -393,7 +393,7 @@ const MidiUI = (() => {
       transport.message(176, [64, e.target.checked ? 127 : 0], config().tx),
     );
   }
-  const fileHtml = `<p>Import native voice or bank SysEx; select a bank slot to edit. Effects travel with YS200 voices.</p><p>${button("save-json", "SAVE JSON")} ${button("save-syx", "SAVE VOICE .SYX")}</p><label>SYSEX CHANNEL <select id="syx-channel">${channelOptions}</select></label><p><label>OPEN .SYX / .JSON <input id="load-syx" type="file" accept=".syx,.json"></label></p><p>${button("bank-new", "NEW BANK FROM CURRENT VOICE")} ${button("bank-save", "SAVE BANK .SYX")}</p><label><input id="bank-confirm" type="checkbox"> Replace the connected synth’s 32-voice bank</label> ${button("bank-send", "SEND BANK")}<div id="bank-voices"></div><p id="file-result" role="status"></p>`;
+  const fileHtml = `<p>Import native voice or bank SysEx; select a bank slot to edit. Effects travel with YS200 voices.</p><p>${button("save-json", "SAVE JSON")} ${button("save-syx", "SAVE VOICE .SYX")}</p><label>SYSEX CHANNEL <select id="syx-channel">${channelOptions}</select></label><p>${button("open-syx", "OPEN .SYX / .JSON")}<input id="load-syx" type="file" accept=".syx,.json" aria-label="Open SysEx or JSON file" hidden></p><p>${button("bank-new", "NEW BANK FROM CURRENT VOICE")} ${button("bank-save", "SAVE BANK .SYX")}</p><label class="file-bank-confirm"><input id="bank-confirm" class="retro-checkbox" type="checkbox"> Replace the connected synth’s 32-voice bank</label> ${button("bank-send", "SEND BANK")}<div id="bank-voices"></div><p id="file-result" role="status"></p>`;
   function showBank() {
     const bank = banks.get(synth.id) || [];
     $("#bank-save").disabled = bank.length !== 32;
@@ -430,6 +430,7 @@ const MidiUI = (() => {
       $("#file-result").textContent =
         "Voice saved. Operator switches are temporary; JSON retains them.";
     });
+    $("#open-syx").onclick = () => $("#load-syx").click();
     $("#load-syx").onchange = async (e) => {
       try {
         const f = e.target.files[0];

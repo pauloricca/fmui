@@ -92,7 +92,9 @@ button:disabled{cursor:var(--cursor-default,default);color:#777}button:disabled:
 .operator-select{font-size:27px;padding:0}
 .operator-role{display:flex;align-items:center;justify-content:center;border:1px solid black;font-size:27px;background:white;color:black}
 .envelope-plot{position:relative;height:100%;background:white}
-.envelope-fill{position:absolute;inset:0 1px 1px;background:var(--dither);pointer-events:none}
+/* Threshold the clipped fill alpha as well as the SVG outline to remove edge fringes. */
+.envelope-fill-mask{position:absolute;inset:0 1px 1px;pointer-events:none}
+.envelope-fill{position:absolute;inset:0;background:var(--dither);pointer-events:none}
 .envelope-fill-off{background:var(--dither-light)}
 .envelope{position:relative;width:100%;height:100%;border:1px solid black;border-top:0;display:block;background:transparent;cursor:var(--cursor-pointer,pointer);shape-rendering:crispEdges}
 .operator-meta{font-size:14px;line-height:12px;white-space:pre;overflow:hidden;padding-top:4px}
@@ -242,8 +244,8 @@ button:disabled{color:#777}
 .controller-assignments legend{padding:0 6px;text-transform:uppercase}
 .assignment-route{display:grid;grid-template-columns:minmax(0,1fr) 90px;gap:12px;align-items:center}
 .assignment-route>label:first-child{display:flex;align-items:center;gap:8px;text-transform:capitalize}
-.assignment-route input[type=checkbox]{appearance:none;width:20px;height:20px;flex:none;border:2px solid black;background:white;box-shadow:inset 2px 2px white,inset -2px -2px black;margin:0}
-.assignment-route input[type=checkbox]:checked{background:black;box-shadow:inset 0 0 0 3px white}
+.assignment-route input[type=checkbox],.retro-checkbox{appearance:none;width:20px;height:20px;flex:none;border:2px solid black;background:white;box-shadow:inset 2px 2px white,inset -2px -2px black;margin:0}
+.assignment-route input[type=checkbox]:checked,.retro-checkbox:checked{background:black;box-shadow:inset 0 0 0 3px white}
 .assignment-route input:disabled{opacity:.45}
 
 /* Horizontal audition faders echo the editor's square handles and dithered rails. */
@@ -344,3 +346,9 @@ html[data-display-overlay=true] .retro-tooltip{background:var(--lcd-overlay-colo
 
 .mapping-source-range output{float:right;font-size:16px}
 .mapping-source-range input[type=range]{border:0;padding:0;margin-top:5px}
+
+.file-bank-confirm{display:inline-flex;align-items:center;gap:8px;margin:8px 0}
+
+.dialog-titlebar{touch-action:none;user-select:none;cursor:var(--cursor-grab,grab)}
+.dialog-titlebar.dragging{cursor:var(--cursor-grabbing,grabbing)}
+dialog.dialog-positioned{position:fixed;margin:0;right:auto;bottom:auto}
