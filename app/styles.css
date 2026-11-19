@@ -30,6 +30,7 @@ button:disabled{cursor:var(--cursor-default,default);color:#777}button:disabled:
 .window-title{height:30px;flex:none;border-bottom:2px solid black;display:flex;align-items:stretch;background:repeating-linear-gradient(0deg,white 0px,white 2px,black 2px,black 3px)}
 .window-title h1{margin:0 auto;padding:3px 20px;background:white;font:22px/1 Atari,monospace;letter-spacing:1px;align-self:stretch}
 .window-title>button{background:white;color:black;width:28px;padding:0;border:0;display:grid;place-items:center;flex:none;font-size:24px}
+#about{width:52px;font-size:16px;border-right:2px solid black}
 #display-overlay{width:38px;font-size:16px}
 .fullscreen-icon{display:block;width:14px;height:14px;flex:none}
 .window-title>.window-box{border-right:2px solid black}.window-title>#zoom{border-left:2px solid black}
